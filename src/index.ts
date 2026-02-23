@@ -3,14 +3,15 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
-  ListPromptsRequestSchema,
-  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
 import { join, resolve, dirname } from "path";
 import { homedir } from "os";
 import { spawn } from "child_process";
 import { fileURLToPath } from "url";
+
+// Promisified sleep for polling
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -61,7 +62,6 @@ class QuizMCPServer {
   private config: NotebookConfig;
   private configPath: string;
   private tempDir: string;
-  private builtinSkills: Map<string, { name: string; description: string; content: string }>;
 
   constructor() {
     this.server = new Server(
@@ -72,7 +72,6 @@ class QuizMCPServer {
       {
         capabilities: {
           tools: {},
-          prompts: {},
         },
       }
     );
@@ -80,9 +79,7 @@ class QuizMCPServer {
     this.configPath = join(homedir(), ".live-time-tutorial", "config.json");
     this.tempDir = join(homedir(), ".live-time-tutorial", "temp");
     this.config = this.loadConfig();
-    this.builtinSkills = this.loadBuiltinSkills();
     this.setupToolHandlers();
-    this.setupPromptHandlers();
 
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
@@ -120,89 +117,6 @@ class QuizMCPServer {
       mkdirSync(this.config.notebookPath, { recursive: true });
     }
     return this.config.notebookPath;
-  }
-
-  private loadBuiltinSkills(): Map<string, { name: string; description: string; content: string }> {
-    const skills = new Map<string, { name: string; description: string; content: string }>();
-    const skillsDir = resolve(__dirname, "..", "src", "builtin-skills");
-
-    if (!existsSync(skillsDir)) {
-      const altDir = resolve(__dirname, "builtin-skills");
-      if (existsSync(altDir)) {
-        return this.loadSkillsFromDir(altDir, skills);
-      }
-      return skills;
-    }
-    return this.loadSkillsFromDir(skillsDir, skills);
-  }
-
-  private loadSkillsFromDir(
-    dir: string,
-    skills: Map<string, { name: string; description: string; content: string }>
-  ) {
-    try {
-      const entries = readdirSync(dir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (entry.isDirectory()) {
-          const mdPath = join(dir, entry.name, "skill.md");
-          if (existsSync(mdPath)) {
-            const raw = readFileSync(mdPath, "utf-8");
-            const nameMatch = raw.match(/^name:\s*(.+)$/m);
-            const descMatch = raw.match(/^description:\s*[|]?\s*\n((?:\s{2,}.+\n?)+)/m)
-              || raw.match(/^description:\s*(.+)$/m);
-            const skillName = nameMatch ? nameMatch[1].trim() : entry.name;
-            const skillDesc = descMatch
-              ? descMatch[1].replace(/^\s{2,}/gm, "").trim()
-              : "Built-in skill";
-            skills.set(skillName, { name: skillName, description: skillDesc, content: raw });
-            console.error(`[MCP] Loaded built-in skill: ${skillName}`);
-          }
-        }
-      }
-    } catch (error) {
-      console.error("Failed to load built-in skills:", error);
-    }
-    return skills;
-  }
-
-  private setupPromptHandlers(): void {
-    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
-      const prompts = [];
-      for (const [id, skill] of this.builtinSkills) {
-        prompts.push({
-          name: id,
-          description: skill.description,
-          arguments: [
-            {
-              name: "quiz_data",
-              description: "JSON string of quiz data from get_pending_quiz (optional, auto-loaded if omitted)",
-              required: false,
-            },
-          ],
-        });
-      }
-      return { prompts };
-    });
-
-    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
-      const { name } = request.params;
-      const skill = this.builtinSkills.get(name);
-      if (!skill) {
-        throw new Error(`Unknown prompt: ${name}`);
-      }
-      return {
-        description: skill.description,
-        messages: [
-          {
-            role: "user",
-            content: {
-              type: "text",
-              text: skill.content,
-            },
-          },
-        ],
-      };
-    });
   }
 
   private ensureTempDir(): string {
@@ -247,14 +161,6 @@ class QuizMCPServer {
                 path: { type: "string", description: "New path, supports ~/" },
               },
               required: ["path"],
-            },
-          },
-          {
-            name: "get_pending_quiz",
-            description: "Get the pending quiz data from GUI (saved when user clicked 'Add to Notebook'). Use this to start the agent-first notebook PDF workflow.",
-            inputSchema: {
-              type: "object",
-              properties: {},
             },
           },
           {
@@ -332,8 +238,6 @@ class QuizMCPServer {
             return await this.handleGenerateQuiz(args as any);
           case "set_notebook_path":
             return await this.handleSetNotebookPath(args as any);
-          case "get_pending_quiz":
-            return await this.handleGetPendingQuiz();
           case "save_notebook_note_pdf":
             return await this.handleSaveNotebookNotePdf(args as any);
           default:
@@ -384,13 +288,71 @@ class QuizMCPServer {
     const quizDataPath = join(quizDir, filename);
     writeFileSync(quizDataPath, JSON.stringify(quiz, null, 2), "utf-8");
 
+    // Launch GUI and wait for result
     this.launchPythonGui(quizDataPath);
 
+    // Poll for result file (max 5 minutes)
+    const resultPath = join(quizDir, `${filename}.result.json`);
+    const maxWaitTime = 5 * 60 * 1000; // 5 minutes
+    const pollInterval = 1000; // 1 second
+    let waited = 0;
+
+    while (waited < maxWaitTime) {
+      if (existsSync(resultPath)) {
+        try {
+          const resultData = JSON.parse(readFileSync(resultPath, "utf-8"));
+          const systemPrompt = `
+
+[SYSTEM PROMPT]
+The user has completed the quiz. Before ending the conversation, please ask them:
+"Would you like me to create a detailed PDF study note for this topic?"
+
+If they agree, generate rich content with these sections:
+- Terminology: Key terms and definitions
+- Knowledge Network: How this connects to other concepts  
+- Key Points: Critical takeaways
+- Examples: Practical code/scenario examples
+- Analogies: Helpful comparisons
+- Visual Summary: Tables, diagrams if applicable
+
+Then call save_notebook_note_pdf with the generated contentMarkdown.`;
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: `Quiz completed!
+
+Question: ${resultData.question}
+Your Answer: ${resultData.selectedAnswer} (${resultData.isCorrect ? "Correct" : "Incorrect"})
+Correct Answer: ${resultData.correctAnswer}
+Explanation: ${resultData.explanation || "N/A"}
+Knowledge Points: ${resultData.knowledgeSummary || "N/A"}
+
+${systemPrompt}`,
+              },
+            ],
+          };
+        } catch (error) {
+          // Continue polling if result file is incomplete
+        }
+      }
+      await sleep(pollInterval);
+      waited += pollInterval;
+    }
+
+    // Timeout - return without waiting for result
     return {
       content: [
         {
           type: "text",
-          text: `Quiz generated. A GUI window should appear shortly.\n\nCategory: ${quiz.category}\nQuestion: ${quiz.question.substring(0, 70)}${quiz.question.length > 70 ? "..." : ""}\nSaved: ${filename}\n\nTip: Quiz data is stored as JSON and rendered by python/quiz_gui.py.`,
+          text: `Quiz launched. GUI window should appear.
+
+Category: ${quiz.category}
+Question: ${quiz.question.substring(0, 70)}${quiz.question.length > 70 ? "..." : ""}
+
+Note: Timed out waiting for answer (5 minutes). If user completed the quiz, check the result file manually:
+${resultPath}`,
         },
       ],
     };
@@ -440,34 +402,6 @@ class QuizMCPServer {
     }
   }
 
-  private async handleGetPendingQuiz() {
-    const pendingPath = join(homedir(), ".live-time-tutorial", "pending_quiz.json");
-    
-    if (!existsSync(pendingPath)) {
-      return {
-        content: [{ type: "text", text: "No pending quiz found. Click 'Add to Notebook' in the quiz GUI first." }],
-        isError: true,
-      };
-    }
-
-    try {
-      const data = JSON.parse(readFileSync(pendingPath, "utf-8"));
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Pending quiz loaded:\n${JSON.stringify(data, null, 2)}\n\nNow use the agent-first-notebook-pdf skill to generate rich content, then call save_notebook_note_pdf.`,
-          },
-        ],
-      };
-    } catch (error) {
-      return {
-        content: [{ type: "text", text: `Failed to read pending quiz: ${error instanceof Error ? error.message : String(error)}` }],
-        isError: true,
-      };
-    }
-  }
-
   private async handleSaveNotebookNotePdf(args: NotebookNotePayload) {
     const notebookDir = this.ensureNotebookDir();
     const tempDir = this.ensureTempDir();
@@ -491,9 +425,9 @@ class QuizMCPServer {
     };
 
     const payloadPath = join(tempDir, `note_payload_${Date.now()}.json`);
-    const outPath = join(notebookDir, `${filenameBase}.pdf`);
+    const outPath = join(notebookDir, "notes", `${filenameBase}.pdf`);
 
-    mkdirSync(notebookDir, { recursive: true });
+    mkdirSync(join(notebookDir, "notes"), { recursive: true });
     writeFileSync(payloadPath, JSON.stringify(payload, null, 2), "utf-8");
 
     const pyScriptPath = join(tempDir, "notebook_pdf_writer.py");

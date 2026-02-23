@@ -23,22 +23,24 @@
 - **Polished GUI** - Modern Python quiz interface with card-style options
 - **One-click Submit** - Click any option to submit instantly (no extra submit step)
 - **Instant Feedback** - Clear result status, explanation, and walkthrough demo
-- **Notebook Export** - One-click “Add to My Notebook” saves a styled PDF note
+- **Notebook Export** - Click "Save to Notebook" to capture a screenshot of your quiz result
+- **Result Feedback** - After quiz completion, AI receives your answer and asks if you want a detailed study note
 - **Skip Anytime** - Decline quizzes without disrupting workflow
 - **Easy Integration** - Works with Cursor, Kilo Code, Windsurf & more
 
 ## 🔄 How It Works
 
 ```
-Task Complete → AI Summarizes → Quiz Prompt → Generate Quiz → One-click Answer → Instant Feedback → Save to Notebook
+Task Complete → AI Summarizes → Generate Quiz → User Answers in GUI → MCP Returns Result → AI Asks for PDF Note → Generate Rich Content → Save PDF to Notebook
 ```
 
 1. **Task Trigger** - AI extracts key knowledge points after finishing a task
-2. **Optional Quiz** - Asks if you want a quiz to reinforce memory
-3. **On-the-fly Generation** - Creates a multiple-choice question instantly
-4. **Smart Evaluation** - Instantly checks correctness after one click
-5. **Knowledge Reinforcement** - Shows explanation + walkthrough + key points
-6. **Notebook Capture** - Exports a polished PDF note with sections, table, and chart
+2. **Quiz Generation** - Creates a multiple-choice question and opens GUI
+3. **User Answers** - Click an option in the GUI to submit
+4. **Result Captured** - MCP receives your answer, correctness, and explanation
+5. **Study Note Prompt** - AI asks if you want a detailed PDF study note
+6. **Rich Content Generation** - Creates comprehensive notes with terminology, examples, analogies
+7. **PDF Export** - Saves a beautifully formatted note to ~/Desktop/Notebook/notes/
 
 ## 🚀 Installation
 
@@ -78,15 +80,36 @@ Restart your IDE to activate the MCP service.
 - **Auto-trigger**: AI asks for a quiz after completing tasks
 - **Manual trigger**: Type "give me a quiz" or "quiz" in chat
 - **Answer in GUI**: Click an option card to submit instantly
-- **Save note**: Click **Add to My Notebook (PDF)** after answering
+- **Save screenshot**: Click **Save to Notebook** after answering to capture result
+- **Get study note**: AI will ask if you want a detailed PDF after quiz completion
 
 ## 🧰 MCP Tools
 
-- `generate_quiz`: Generate a quiz and open the Live-time-tutorial GUI
+- `generate_quiz`: Generate a quiz, open GUI, wait for answer, and return result with system prompt
 - `set_notebook_path`: Set custom Notebook path (default: `~/Desktop/Notebook`)
-- `save_notebook_note_pdf`: Built-in LLM/agent-skill driven Notebook PDF generation
+- `save_notebook_note_pdf`: Generate a beautiful PDF study note using agent skills
 
-### `save_notebook_note_pdf` (Agent-skill Friendly)
+### Built-in Agent Skills
+
+The MCP includes an agent skill in `src/builtin-skills/`:
+
+**`rich-notebook-pdf-generator`**: Comprehensive study notes with 6 educational sections:
+- Terminology Definitions
+- Knowledge Network  
+- Key Points
+- Practical Examples
+- Analogies & Comparisons
+- Visual Summary
+
+### `generate_quiz` Workflow
+
+When you call `generate_quiz`:
+1. GUI window opens with the quiz
+2. MCP waits (up to 5 minutes) for you to answer
+3. Returns your answer + correctness + explanation
+4. Includes system prompt asking if you want a PDF study note
+5. If yes → use `rich-notebook-pdf-generator` skill to create content
+6. Call `save_notebook_note_pdf` to generate the PDF
 
 Use your agent skills to generate rich markdown first, then pass it via `contentMarkdown`.
 This avoids rigid templates and gives flexible structure and styling.
@@ -112,8 +135,9 @@ Minimal example payload:
 
 ## 🏗️ Project Structure
 
-- `src/index.ts`: MCP service core
-- `vscode-extension/`: VS Code helper extension
+- `src/index.ts`: MCP service core with quiz generation and PDF export
+- `python/quiz_gui.py`: Python GUI for interactive quiz
+- `src/builtin-skills/`: Agent skills for PDF content generation
 
 ## 📄 License
 
