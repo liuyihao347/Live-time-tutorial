@@ -1,9 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 import json
-import os
 import sys
-import base64
 from pathlib import Path
 
 try:
@@ -12,11 +10,10 @@ try:
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
 except Exception:
     A4 = None
-
-DEFAULT_QUIZ_DATA = None
-
 
 def _default_notebook_dir() -> Path:
     return Path.home() / "Desktop" / "Notebook"
@@ -50,11 +47,36 @@ def _sanitize_filename(name: str) -> str:
     return name[:80] if len(name) > 80 else name
 
 
+def _extract_points(text: str) -> list[str]:
+    if not text:
+        return []
+    return [p.strip() for p in text.replace("\n", "|").split("|") if p.strip()]
+
+
+def _build_demo_steps(explanation: str, selected_text: str, correct_text: str) -> list[str]:
+    steps = []
+    if explanation:
+        sentences = [s.strip() for s in explanation.replace("\n", " ").split(".") if s.strip()]
+        for sentence in sentences[:3]:
+            steps.append(sentence)
+
+    if not steps:
+        steps = [
+            "Understand what the question is really asking.",
+            "Compare each option with the required time complexity.",
+            "Choose the option that satisfies both correctness and efficiency.",
+        ]
+
+    steps.append(f"Your selected option: {selected_text}")
+    steps.append(f"Best option: {correct_text}")
+    return steps
+
+
 def _build_note_payload(quiz_data: dict, selected_index: int) -> dict:
     correct_index = int(quiz_data.get("correctIndex", 0))
     is_correct = selected_index == correct_index
     knowledge = quiz_data.get("knowledgeSummary", "") or ""
-    points = [p.strip() for p in knowledge.replace("\n", "|").split("|") if p.strip()]
+    points = _extract_points(knowledge)
 
     correct_text = quiz_data.get("options", [""])[correct_index]
     selected_text = quiz_data.get("options", [""])[selected_index]
@@ -62,6 +84,9 @@ def _build_note_payload(quiz_data: dict, selected_index: int) -> dict:
     title = quiz_data.get("category") or "Notebook"
     topic = quiz_data.get("question", "").strip()
     explanation = (quiz_data.get("explanation", "") or "").strip()
+
+    demo_steps = _build_demo_steps(explanation, selected_text, correct_text)
+    score = 100 if is_correct else 35
 
     return {
         "title": title,
@@ -84,11 +109,27 @@ def _build_note_payload(quiz_data: dict, selected_index: int) -> dict:
                 "heading": "Explanation",
                 "body": explanation if explanation else "(No explanation provided)",
             },
+            {
+                "heading": "Quick Walkthrough",
+                "body": "\n".join([f"{i + 1}. {step}" for i, step in enumerate(demo_steps)]),
+            },
         ],
         "key_points": points,
         "table": {
-            "headers": ["Option", "Text"],
-            "rows": [[chr(65 + i), opt] for i, opt in enumerate(quiz_data.get("options", []))],
+            "headers": ["Option", "Content", "Evaluation"],
+            "rows": [
+                [
+                    chr(65 + i),
+                    opt,
+                    "Correct" if i == correct_index else ("Selected" if i == selected_index else "Not selected"),
+                ]
+                for i, opt in enumerate(quiz_data.get("options", []))
+            ],
+        },
+        "chart": {
+            "title": "Answer Quality",
+            "labels": ["Your Score", "Perfect Score"],
+            "values": [score, 100],
         },
     }
 
@@ -120,7 +161,7 @@ def _write_notebook_pdf(notebook_dir: Path, payload: dict) -> Path:
         fontName="Helvetica-Bold",
         fontSize=18,
         leading=22,
-        textColor=colors.HexColor("#0F172A"),
+        textColor=colors.HexColor("#0E1A2B"),
         spaceAfter=10,
     )
     h_style = ParagraphStyle(
@@ -170,7 +211,7 @@ def _write_notebook_pdf(notebook_dir: Path, payload: dict) -> Path:
     if table_data and table_data.get("headers") and table_data.get("rows"):
         story.append(Paragraph("Options Table", h_style))
         data = [table_data["headers"]] + table_data["rows"]
-        t = Table(data, colWidths=[28 * mm, 150 * mm])
+        t = Table(data, colWidths=[24 * mm, 110 * mm, 44 * mm])
         t.setStyle(
             TableStyle(
                 [
@@ -191,6 +232,32 @@ def _write_notebook_pdf(notebook_dir: Path, payload: dict) -> Path:
         story.append(Spacer(1, 6))
         story.append(t)
 
+    chart_data = payload.get("chart")
+    if chart_data and chart_data.get("labels") and chart_data.get("values"):
+        labels = list(chart_data.get("labels") or [])
+        values = list(chart_data.get("values") or [])
+        if len(labels) == len(values) and labels:
+            story.append(Paragraph(chart_data.get("title") or "Chart", h_style))
+            drawing = Drawing(170 * mm, 62 * mm)
+            chart = VerticalBarChart()
+            chart.x = 10
+            chart.y = 8
+            chart.height = 52 * mm
+            chart.width = 160 * mm
+            chart.data = [values]
+            chart.categoryAxis.categoryNames = labels
+            chart.valueAxis.valueMin = 0
+            chart.valueAxis.valueMax = max(100, max(values))
+            chart.valueAxis.valueStep = 20
+            chart.bars[0].fillColor = colors.HexColor("#2563EB")
+            chart.strokeColor = colors.HexColor("#CBD5E1")
+            chart.valueAxis.strokeColor = colors.HexColor("#CBD5E1")
+            chart.categoryAxis.labels.angle = 20
+            chart.categoryAxis.labels.dy = -10
+            drawing.add(chart)
+            story.append(Spacer(1, 6))
+            story.append(drawing)
+
     doc.build(story)
     return pdf_path
 
@@ -199,16 +266,17 @@ class QuizWindow:
         self.quiz_data = quiz_data
         self.answered = False
         self.selected_index = None
+        self.option_rows = []
 
         self.config = _load_config()
         self.notebook_dir = Path(self.config.get("notebookPath") or str(_default_notebook_dir()))
 
         self.root = tk.Tk()
-        self.root.title(f"Live-time Tutorial - {quiz_data.get('category', 'Quiz')}")
-        width = 860
-        height = 720
+        self.root.title(f"Live-time-tutorial - {quiz_data.get('category', 'Quiz')}")
+        width = 980
+        height = 760
         self.root.geometry(f"{width}x{height}")
-        self.root.configure(bg="#0B1220")
+        self.root.configure(bg="#0A1220")
 
         # Center window
         self.root.update_idletasks()
@@ -230,24 +298,19 @@ class QuizWindow:
         except Exception:
             pass
 
-        style.configure("App.TFrame", background="#0B1220")
-        style.configure("Card.TFrame", background="#0F172A")
-        style.configure("Muted.TLabel", background="#0F172A", foreground="#94A3B8", font=("Segoe UI", 10))
-        style.configure("Title.TLabel", background="#0F172A", foreground="#F8FAFC", font=("Segoe UI", 16, "bold"))
-        style.configure("H2.TLabel", background="#0F172A", foreground="#E2E8F0", font=("Segoe UI", 11, "bold"))
-        style.configure("Body.TLabel", background="#0F172A", foreground="#E2E8F0", font=("Segoe UI", 11))
-        style.configure("Pill.TLabel", background="#111C33", foreground="#A5B4FC", font=("Segoe UI", 9, "bold"))
+        style.configure("App.TFrame", background="#0A1220")
+        style.configure("Card.TFrame", background="#101B2D")
+        style.configure("Title.TLabel", background="#101B2D", foreground="#F8FAFC", font=("Segoe UI", 18, "bold"))
+        style.configure("H2.TLabel", background="#101B2D", foreground="#E2E8F0", font=("Segoe UI", 12, "bold"))
+        style.configure("Muted.TLabel", background="#101B2D", foreground="#9FB0CB", font=("Segoe UI", 10))
+        style.configure("Pill.TLabel", background="#1A2A44", foreground="#93C5FD", font=("Segoe UI", 9, "bold"))
+        style.configure("Success.TLabel", background="#101B2D", foreground="#34D399", font=("Segoe UI", 11, "bold"))
+        style.configure("Danger.TLabel", background="#101B2D", foreground="#F87171", font=("Segoe UI", 11, "bold"))
         style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 10))
         style.configure("Secondary.TButton", font=("Segoe UI", 10), padding=(12, 10))
-        style.configure("Option.TRadiobutton", background="#0F172A", foreground="#E2E8F0", font=("Segoe UI", 11), padding=(12, 10))
-        style.map(
-            "Option.TRadiobutton",
-            background=[("active", "#111C33")],
-            foreground=[("disabled", "#64748B"), ("active", "#F8FAFC")],
-        )
     
     def setup_ui(self):
-        app = ttk.Frame(self.root, padding=26, style="App.TFrame")
+        app = ttk.Frame(self.root, padding=24, style="App.TFrame")
         app.pack(fill=tk.BOTH, expand=True)
 
         header = ttk.Frame(app, padding=0, style="App.TFrame")
@@ -258,7 +321,7 @@ class QuizWindow:
 
         category = self.quiz_data.get("category", "Quiz")
         ttk.Label(title_card, text=f"{category}", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(title_card, text="Click an option to submit instantly.", style="Muted.TLabel").pack(anchor=tk.W, pady=(6, 0))
+        ttk.Label(title_card, text="One click to submit. Instant feedback, explanation, and notebook export.", style="Muted.TLabel").pack(anchor=tk.W, pady=(6, 0))
 
         notebook_row = ttk.Frame(title_card, style="Card.TFrame")
         notebook_row.pack(fill=tk.X, pady=(14, 0))
@@ -277,13 +340,13 @@ class QuizWindow:
             command=self.change_notebook_path,
         ).pack(side=tk.RIGHT)
 
-        content = ttk.Frame(app, padding=(0, 18, 0, 0), style="App.TFrame")
+        content = ttk.Frame(app, padding=(0, 16, 0, 0), style="App.TFrame")
         content.pack(fill=tk.BOTH, expand=True)
 
         left = ttk.Frame(content, style="App.TFrame")
         left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        right = ttk.Frame(content, style="App.TFrame")
+        right = ttk.Frame(content, style="App.TFrame", width=360)
         right.pack(side=tk.RIGHT, fill=tk.BOTH)
 
         q_card = ttk.Frame(left, padding=18, style="Card.TFrame")
@@ -295,13 +358,13 @@ class QuizWindow:
             height=6,
             wrap=tk.WORD,
             font=("Segoe UI", 11),
-            bg="#0B1220",
+            bg="#0A1220",
             fg="#E2E8F0",
             relief=tk.FLAT,
             padx=12,
             pady=12,
             highlightthickness=1,
-            highlightbackground="#23304A",
+            highlightbackground="#2D3B56",
             insertbackground="#E2E8F0",
         )
         self.question_text.insert("1.0", self.quiz_data.get("question", ""))
@@ -310,58 +373,125 @@ class QuizWindow:
 
         opt_card = ttk.Frame(left, padding=18, style="Card.TFrame")
         opt_card.pack(fill=tk.X, pady=(16, 0))
-        ttk.Label(opt_card, text="Options", style="H2.TLabel").pack(anchor=tk.W)
+        ttk.Label(opt_card, text="Options (click any card)", style="H2.TLabel").pack(anchor=tk.W)
 
-        self.selected_var = tk.IntVar(value=-1)
-        self.option_buttons = []
+        options_wrap = tk.Frame(opt_card, bg="#101B2D", highlightthickness=0)
+        options_wrap.pack(fill=tk.X, pady=(10, 0))
+
         for i, option in enumerate(self.quiz_data.get("options", [])):
-            rb = ttk.Radiobutton(
-                opt_card,
-                text=f"{chr(65 + i)}. {option}",
-                variable=self.selected_var,
-                value=i,
-                style="Option.TRadiobutton",
-                command=self.submit_answer,
+            row = tk.Frame(
+                options_wrap,
+                bg="#15233A",
+                highlightthickness=1,
+                highlightbackground="#2E3F60",
+                cursor="hand2",
+                padx=12,
+                pady=11,
             )
-            rb.pack(fill=tk.X, pady=7)
-            self.option_buttons.append(rb)
+            row.pack(fill=tk.X, pady=6)
 
-        self.hint_label = ttk.Label(opt_card, text="Tip: You can click once. No extra submit step.", style="Muted.TLabel")
+            index_label = tk.Label(
+                row,
+                text=chr(65 + i),
+                width=3,
+                bg="#203554",
+                fg="#DBEAFE",
+                font=("Segoe UI", 10, "bold"),
+                relief=tk.FLAT,
+                padx=5,
+                pady=4,
+            )
+            index_label.pack(side=tk.LEFT)
+
+            text_label = tk.Label(
+                row,
+                text=option,
+                bg="#15233A",
+                fg="#E2E8F0",
+                justify=tk.LEFT,
+                wraplength=500,
+                anchor=tk.W,
+                font=("Segoe UI", 11),
+                padx=10,
+            )
+            text_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+            row.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
+            index_label.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
+            text_label.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
+            row.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
+            row.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
+            index_label.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
+            index_label.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
+            text_label.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
+            text_label.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
+
+            self.option_rows.append({"row": row, "index_label": index_label, "text_label": text_label})
+
+        self.hint_label = ttk.Label(opt_card, text="No submit button needed. One click = submitted.", style="Muted.TLabel")
         self.hint_label.pack(anchor=tk.W, pady=(8, 0))
 
         result_card = ttk.Frame(right, padding=18, style="Card.TFrame")
         result_card.pack(fill=tk.BOTH, expand=True)
         ttk.Label(result_card, text="Result", style="H2.TLabel").pack(anchor=tk.W)
 
-        self.result_badge = ttk.Label(result_card, text="Waiting", style="Pill.TLabel")
+        self.result_badge = ttk.Label(result_card, text="Waiting for answer", style="Pill.TLabel")
         self.result_badge.pack(anchor=tk.W, pady=(10, 0))
+
+        self.result_status = ttk.Label(result_card, text="", style="Muted.TLabel")
+        self.result_status.pack(anchor=tk.W, pady=(6, 0))
 
         self.result_text = tk.Text(
             result_card,
-            height=18,
+            height=19,
             wrap=tk.WORD,
             font=("Segoe UI", 10.5),
-            bg="#0B1220",
+            bg="#0A1220",
             fg="#E2E8F0",
             relief=tk.FLAT,
             padx=12,
             pady=12,
             highlightthickness=1,
-            highlightbackground="#23304A",
+            highlightbackground="#2D3B56",
             insertbackground="#E2E8F0",
         )
-        self.result_text.insert("1.0", "Select an option to see feedback, explanation, and a quick recap.")
+        self.result_text.insert("1.0", "After you click an option, you will get instant result feedback, explanation, and a walkthrough demo.")
         self.result_text.config(state=tk.DISABLED)
         self.result_text.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
         self.add_btn = ttk.Button(
             result_card,
-            text="Add to Notebook (PDF)",
+            text="Add to My Notebook (PDF)",
             style="Primary.TButton",
             command=self.add_to_notebook,
             state=tk.DISABLED,
         )
         self.add_btn.pack(fill=tk.X, pady=(14, 0))
+
+        self.note_status = ttk.Label(result_card, text="Notebook export is enabled after answering.", style="Muted.TLabel")
+        self.note_status.pack(anchor=tk.W, pady=(10, 0))
+
+    def _hover_option(self, row: tk.Frame, entering: bool):
+        if self.answered:
+            return
+        row.configure(bg="#1D2F4E" if entering else "#15233A")
+
+    def _set_option_style(self, idx: int, state: str):
+        cfg = self.option_rows[idx]
+        row = cfg["row"]
+        dot = cfg["index_label"]
+        text = cfg["text_label"]
+
+        palette = {
+            "idle": ("#15233A", "#203554", "#E2E8F0", "#DBEAFE", "#2E3F60"),
+            "selected": ("#2A4062", "#355C8D", "#F8FAFC", "#DBEAFE", "#4A6999"),
+            "correct": ("#0F3A2F", "#166543", "#ECFDF5", "#D1FAE5", "#21825A"),
+            "wrong": ("#4A1E2A", "#7F1D1D", "#FEE2E2", "#FECACA", "#9F3131"),
+        }
+        bg, dot_bg, text_fg, dot_fg, border = palette[state]
+        row.configure(bg=bg, highlightbackground=border, cursor="arrow")
+        dot.configure(bg=dot_bg, fg=dot_fg)
+        text.configure(bg=bg, fg=text_fg)
     
     def change_notebook_path(self):
         chosen = filedialog.askdirectory(title="Select Notebook folder")
@@ -374,13 +504,10 @@ class QuizWindow:
         except Exception:
             pass
         self.notebook_path_label.config(text=f"Notebook: {self.notebook_dir}")
+        self.note_status.config(text=f"Notebook path updated: {self.notebook_dir}")
     
-    def submit_answer(self):
+    def submit_answer(self, selected: int):
         if self.answered:
-            return
-
-        selected = int(self.selected_var.get())
-        if selected < 0:
             return
 
         self.selected_index = selected
@@ -388,30 +515,49 @@ class QuizWindow:
         correct = int(self.quiz_data.get("correctIndex", 0))
         is_correct = selected == correct
 
-        for i, rb in enumerate(self.option_buttons):
-            rb.state(["disabled"])
+        for i in range(len(self.option_rows)):
+            self._set_option_style(i, "idle")
+
+        self._set_option_style(selected, "selected")
+        self._set_option_style(correct, "correct")
+        if selected != correct:
+            self._set_option_style(selected, "wrong")
 
         explanation = (self.quiz_data.get("explanation") or "").strip()
         knowledge = (self.quiz_data.get("knowledgeSummary") or "").strip()
-        points = [p.strip() for p in knowledge.replace("\n", "|").split("|") if p.strip()]
+        points = _extract_points(knowledge)
 
         correct_answer = self.quiz_data.get("options", [""])[correct]
         selected_answer = self.quiz_data.get("options", [""])[selected]
 
         badge = "Correct" if is_correct else "Incorrect"
         self.result_badge.config(text=badge)
+        self.result_status.config(
+            text="Excellent choice. You can now export the note to Notebook."
+            if is_correct
+            else "Not the best choice. Review the walkthrough and save notes to reinforce learning."
+        )
 
-        lines = []
-        lines.append(f"{badge}\n")
-        lines.append(f"Your answer: {chr(65 + selected)}. {selected_answer}")
-        lines.append(f"Correct answer: {chr(65 + correct)}. {correct_answer}\n")
+        demo_steps = _build_demo_steps(explanation, selected_answer, correct_answer)
 
-        if explanation:
-            lines.append("Explanation")
-            lines.append(explanation.strip() + "\n")
+        lines = [
+            f"Result: {badge}",
+            "",
+            f"Your answer: {chr(65 + selected)}. {selected_answer}",
+            f"Correct answer: {chr(65 + correct)}. {correct_answer}",
+            "",
+            "Clear Explanation",
+            explanation if explanation else "(No explanation provided)",
+            "",
+            "Walkthrough Demo",
+        ]
+
+        for i, step in enumerate(demo_steps, start=1):
+            lines.append(f"{i}. {step}")
 
         if points:
-            lines.append("Key points")
+            lines.append("")
+            lines.append("Key Points")
             for p in points:
                 lines.append(f"- {p}")
 
@@ -422,6 +568,7 @@ class QuizWindow:
         self.result_text.config(state=tk.DISABLED)
 
         self.add_btn.config(state=tk.NORMAL)
+        self.note_status.config(text="Ready. Click 'Add to My Notebook (PDF)' to save a polished note.")
 
     def add_to_notebook(self):
         if not self.answered or self.selected_index is None:
@@ -430,44 +577,29 @@ class QuizWindow:
         try:
             payload = _build_note_payload(self.quiz_data, int(self.selected_index))
             pdf_path = _write_notebook_pdf(self.notebook_dir, payload)
+            self.note_status.config(text=f"Saved: {pdf_path}")
             messagebox.showinfo("Saved", f"Notebook PDF saved:\n{pdf_path}")
         except Exception as e:
             messagebox.showerror("Failed", str(e))
 
 def load_quiz_from_args():
     """Load quiz data from command line args."""
-    # If DEFAULT_QUIZ_DATA is set, this is a standalone quiz file.
-    if DEFAULT_QUIZ_DATA is not None:
-        return DEFAULT_QUIZ_DATA
-    
     if len(sys.argv) < 2:
-        # No args
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror("Error", "Usage:\npython quiz_gui.py <quiz file path>")
         sys.exit(1)
-    
-    quiz_file = sys.argv[1]
-    
-    if not os.path.exists(quiz_file):
+
+    quiz_file = Path(sys.argv[1]).expanduser().resolve()
+
+    if not quiz_file.exists():
         root = tk.Tk()
         root.withdraw()
         messagebox.showerror("Error", f"File not found: {quiz_file}")
         sys.exit(1)
-    
-    # If this is a standalone Python quiz file, extract embedded JSON.
-    if quiz_file.endswith('.py'):
-        # Execute the file to extract embedded data
-        import subprocess
-        result = subprocess.run([sys.executable, quiz_file, "--extract"], 
-                                capture_output=True, text=True)
-        if result.returncode == 0:
-            return json.loads(result.stdout)
-    
-    # Otherwise, treat it as a JSON file.
+
     try:
-        with open(quiz_file, "r", encoding="utf-8") as f:
-            return json.load(f)
+        return json.loads(quiz_file.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
         root = tk.Tk()
         root.withdraw()

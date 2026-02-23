@@ -6,7 +6,7 @@
   <img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="MIT License">
 </p>
 
-<h1 align="center">⚡ Live-time Tutorial MCP</h1>
+<h1 align="center">⚡ Live-time-tutorial MCP</h1>
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README_CN.md">简体中文</a>

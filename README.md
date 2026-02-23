@@ -6,36 +6,39 @@
   <img src="https://img.shields.io/badge/License-MIT-f59e0b?style=flat-square" alt="MIT License">
 </p>
 
-<h1 align="center">⚡ Live-time Tutorial MCP</h1>
+<h1 align="center">⚡ Live-time-tutorial MCP</h1>
 
 <p align="center">
   <a href="README.md">English</a> | <a href="README_CN.md">Chinese</a>
 </p>
 
 <p align="center">
-  <strong>AI generates knowledge quizzes after task completion to reinforce learning and boost retention</strong>
+  <strong>AI generates interactive knowledge quizzes with instant feedback and one-click Notebook export</strong>
 </p>
 
 ---
 
 ## 🧠 Highlights
 
-- **Instant Quiz** - Auto-generates quizzes after AI completes tasks
-- **Instant Feedback** - Auto-grading with detailed explanations
+- **Polished GUI** - Modern Python quiz interface with card-style options
+- **One-click Submit** - Click any option to submit instantly (no extra submit step)
+- **Instant Feedback** - Clear result status, explanation, and walkthrough demo
+- **Notebook Export** - One-click “Add to My Notebook” saves a styled PDF note
 - **Skip Anytime** - Decline quizzes without disrupting workflow
 - **Easy Integration** - Works with Cursor, Kilo Code, Windsurf & more
 
 ## 🔄 How It Works
 
 ```
-Task Complete → AI Summarizes → Quiz Prompt → Generate Questions → Answer → Get Feedback
+Task Complete → AI Summarizes → Quiz Prompt → Generate Quiz → One-click Answer → Instant Feedback → Save to Notebook
 ```
 
 1. **Task Trigger** - AI extracts key knowledge points after finishing a task
 2. **Optional Quiz** - Asks if you want a quiz to reinforce memory
 3. **On-the-fly Generation** - Creates a multiple-choice question instantly
-4. **Smart Evaluation** - Automatically checks your answer
-5. **Knowledge Reinforcement** - Provides detailed analysis and summary
+4. **Smart Evaluation** - Instantly checks correctness after one click
+5. **Knowledge Reinforcement** - Shows explanation + walkthrough + key points
+6. **Notebook Capture** - Exports a polished PDF note with sections, table, and chart
 
 ## 🚀 Installation
 
@@ -74,9 +77,38 @@ Restart your IDE to activate the MCP service.
 
 - **Auto-trigger**: AI asks for a quiz after completing tasks
 - **Manual trigger**: Type "give me a quiz" or "quiz" in chat
-- **Answer**:
-  - Chat mode: Submit by typing the option letter (A/B/C/D)
-  - **VS Code Extension**: Click option buttons to answer (recommended)
+- **Answer in GUI**: Click an option card to submit instantly
+- **Save note**: Click **Add to My Notebook (PDF)** after answering
+
+## 🧰 MCP Tools
+
+- `generate_quiz`: Generate a quiz and open the Live-time-tutorial GUI
+- `set_notebook_path`: Set custom Notebook path (default: `~/Desktop/Notebook`)
+- `save_notebook_note_pdf`: Built-in LLM/agent-skill driven Notebook PDF generation
+
+### `save_notebook_note_pdf` (Agent-skill Friendly)
+
+Use your agent skills to generate rich markdown first, then pass it via `contentMarkdown`.
+This avoids rigid templates and gives flexible structure and styling.
+
+- Preferred flexible input: `contentMarkdown`
+- Optional structured input: `sections`, `keyPoints`, `table`, `chart`
+- Optional style input: `design.theme` (`clean` / `warm` / `forest`), `design.accentColor`
+
+Minimal example payload:
+
+```json
+{
+  "topic": "Binary Search Decision Strategy",
+  "summary": "Fast review note",
+  "contentMarkdown": "# Core Idea\nBinary search halves search space each step.\n\n## Checklist\n- Sorted data required\n- Use low/high boundaries\n- Prevent overflow in mid\n\n> Prefer binary search when random access is O(1)",
+  "tags": ["algorithm", "search"],
+  "design": {
+    "theme": "clean",
+    "accentColor": "#2563EB"
+  }
+}
+```
 
 ## 🏗️ Project Structure
 

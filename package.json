@@ -1,5 +1,5 @@
 {
-  "name": "live-time-tutorial-mcp",
+  "name": "live-time-tutorial",
   "version": "4.0.0",
   "description": "MCP server + Python GUI for instant quizzes and Notebook notes",
   "main": "dist/index.js",
