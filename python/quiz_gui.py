@@ -3,6 +3,13 @@ from tkinter import ttk, messagebox, filedialog
 import json
 import sys
 from pathlib import Path
+import ctypes
+
+# Enable high DPI awareness for Windows (reduces graininess)
+try:
+    ctypes.windll.shcore.SetProcessDpiAwareness(2)  # PROCESS_PER_MONITOR_DPI_AWARE
+except Exception:
+    pass
 
 try:
     from reportlab.lib.pagesizes import A4
@@ -139,11 +146,9 @@ def _write_notebook_pdf(notebook_dir: Path, payload: dict) -> Path:
         raise RuntimeError("reportlab is required. Install with: pip install reportlab")
 
     notebook_dir.mkdir(parents=True, exist_ok=True)
-    notes_dir = notebook_dir / "notes"
-    notes_dir.mkdir(parents=True, exist_ok=True)
 
     filename = _sanitize_filename(payload.get("topic") or "note") + ".pdf"
-    pdf_path = notes_dir / filename
+    pdf_path = notebook_dir / filename
 
     doc = SimpleDocTemplate(
         str(pdf_path),
@@ -272,17 +277,27 @@ class QuizWindow:
         self.notebook_dir = Path(self.config.get("notebookPath") or str(_default_notebook_dir()))
 
         self.root = tk.Tk()
-        self.root.title(f"Live-time-tutorial - {quiz_data.get('category', 'Quiz')}")
-        width = 980
-        height = 760
+        self.root.title(f"Live-time-tutorial")
+        
+        # Get actual screen dimensions (accounting for DPI scaling)
+        screen_width = self.root.winfo_screenwidth()
+        screen_height = self.root.winfo_screenheight()
+        
+        # Set window size to 85% of screen or max 1400x900
+        width = min(int(screen_width * 0.85), 1400)
+        height = min(int(screen_height * 0.85), 900)
+        
         self.root.geometry(f"{width}x{height}")
-        self.root.configure(bg="#0A1220")
+        self.root.minsize(800, 600)
+        self.root.configure(bg="#F8FAFC")
 
-        # Center window
-        self.root.update_idletasks()
-        x = (self.root.winfo_screenwidth() // 2) - (width // 2)
-        y = (self.root.winfo_screenheight() // 2) - (height // 2)
-        self.root.geometry(f'{width}x{height}+{x}+{y}')
+        # Center window after a short delay to ensure proper sizing
+        def center_window():
+            x = (self.root.winfo_screenwidth() - width) // 2
+            y = (self.root.winfo_screenheight() - height) // 2
+            self.root.geometry(f'{width}x{height}+{x}+{y}')
+        
+        self.root.after(50, center_window)
         
         self._setup_style()
         self.setup_ui()
@@ -298,16 +313,16 @@ class QuizWindow:
         except Exception:
             pass
 
-        style.configure("App.TFrame", background="#0A1220")
-        style.configure("Card.TFrame", background="#101B2D")
-        style.configure("Title.TLabel", background="#101B2D", foreground="#F8FAFC", font=("Segoe UI", 18, "bold"))
-        style.configure("H2.TLabel", background="#101B2D", foreground="#E2E8F0", font=("Segoe UI", 12, "bold"))
-        style.configure("Muted.TLabel", background="#101B2D", foreground="#9FB0CB", font=("Segoe UI", 10))
-        style.configure("Pill.TLabel", background="#1A2A44", foreground="#93C5FD", font=("Segoe UI", 9, "bold"))
-        style.configure("Success.TLabel", background="#101B2D", foreground="#34D399", font=("Segoe UI", 11, "bold"))
-        style.configure("Danger.TLabel", background="#101B2D", foreground="#F87171", font=("Segoe UI", 11, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 10))
-        style.configure("Secondary.TButton", font=("Segoe UI", 10), padding=(12, 10))
+        style.configure("App.TFrame", background="#F8FAFC")
+        style.configure("Card.TFrame", background="#FFFFFF")
+        style.configure("Title.TLabel", background="#FFFFFF", foreground="#0F172A", font=("Segoe UI", 22, "bold"))
+        style.configure("H2.TLabel", background="#FFFFFF", foreground="#334155", font=("Segoe UI", 14, "bold"))
+        style.configure("Muted.TLabel", background="#FFFFFF", foreground="#64748B", font=("Segoe UI", 11))
+        style.configure("Pill.TLabel", background="#DBEAFE", foreground="#1E40AF", font=("Segoe UI", 11, "bold"))
+        style.configure("Success.TLabel", background="#FFFFFF", foreground="#059669", font=("Segoe UI", 13, "bold"))
+        style.configure("Danger.TLabel", background="#FFFFFF", foreground="#DC2626", font=("Segoe UI", 13, "bold"))
+        style.configure("Primary.TButton", font=("Segoe UI", 12, "bold"), padding=(18, 12))
+        style.configure("Secondary.TButton", font=("Segoe UI", 11), padding=(14, 10))
     
     def setup_ui(self):
         app = ttk.Frame(self.root, padding=24, style="App.TFrame")
@@ -316,12 +331,11 @@ class QuizWindow:
         header = ttk.Frame(app, padding=0, style="App.TFrame")
         header.pack(fill=tk.X)
 
-        title_card = ttk.Frame(header, padding=18, style="Card.TFrame")
+        title_card = ttk.Frame(header, padding=20, style="Card.TFrame")
         title_card.pack(fill=tk.X)
 
-        category = self.quiz_data.get("category", "Quiz")
-        ttk.Label(title_card, text=f"{category}", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(title_card, text="One click to submit. Instant feedback, explanation, and notebook export.", style="Muted.TLabel").pack(anchor=tk.W, pady=(6, 0))
+        ttk.Label(title_card, text="Live-time-tutorial", style="Title.TLabel").pack(anchor=tk.W)
+        ttk.Label(title_card, text="Click any option card to submit instantly.", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
 
         notebook_row = ttk.Frame(title_card, style="Card.TFrame")
         notebook_row.pack(fill=tk.X, pady=(14, 0))
@@ -340,79 +354,83 @@ class QuizWindow:
             command=self.change_notebook_path,
         ).pack(side=tk.RIGHT)
 
-        content = ttk.Frame(app, padding=(0, 16, 0, 0), style="App.TFrame")
+        content = ttk.Frame(app, padding=(0, 20, 0, 0), style="App.TFrame")
         content.pack(fill=tk.BOTH, expand=True)
 
+        # Left panel - Question and Options (60% width)
         left = ttk.Frame(content, style="App.TFrame")
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 12))
 
-        right = ttk.Frame(content, style="App.TFrame", width=360)
-        right.pack(side=tk.RIGHT, fill=tk.BOTH)
+        # Right panel - Result (40% width, min 380px)
+        right = ttk.Frame(content, style="App.TFrame")
+        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(12, 0))
+        right.config(width=420)
+        right.pack_propagate(False)
 
-        q_card = ttk.Frame(left, padding=18, style="Card.TFrame")
-        q_card.pack(fill=tk.X)
+        q_card = ttk.Frame(left, padding=20, style="Card.TFrame")
+        q_card.pack(fill=tk.BOTH, expand=True)
         ttk.Label(q_card, text="Question", style="H2.TLabel").pack(anchor=tk.W)
 
         self.question_text = tk.Text(
             q_card,
-            height=6,
+            height=3,
             wrap=tk.WORD,
-            font=("Segoe UI", 11),
-            bg="#0A1220",
-            fg="#E2E8F0",
+            font=("Segoe UI", 13),
+            bg="#F1F5F9",
+            fg="#1E293B",
             relief=tk.FLAT,
-            padx=12,
-            pady=12,
+            padx=16,
+            pady=16,
             highlightthickness=1,
-            highlightbackground="#2D3B56",
-            insertbackground="#E2E8F0",
+            highlightbackground="#E2E8F0",
+            insertbackground="#1E293B",
         )
         self.question_text.insert("1.0", self.quiz_data.get("question", ""))
         self.question_text.config(state=tk.DISABLED)
-        self.question_text.pack(fill=tk.X, pady=(10, 0))
+        self.question_text.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
 
-        opt_card = ttk.Frame(left, padding=18, style="Card.TFrame")
+        opt_card = ttk.Frame(left, padding=20, style="Card.TFrame")
         opt_card.pack(fill=tk.X, pady=(16, 0))
-        ttk.Label(opt_card, text="Options (click any card)", style="H2.TLabel").pack(anchor=tk.W)
+        ttk.Label(opt_card, text="Options", style="H2.TLabel").pack(anchor=tk.W)
 
-        options_wrap = tk.Frame(opt_card, bg="#101B2D", highlightthickness=0)
+        options_wrap = tk.Frame(opt_card, bg="#FFFFFF", highlightthickness=0)
         options_wrap.pack(fill=tk.X, pady=(10, 0))
 
         for i, option in enumerate(self.quiz_data.get("options", [])):
             row = tk.Frame(
                 options_wrap,
-                bg="#15233A",
+                bg="#FFFFFF",
                 highlightthickness=1,
-                highlightbackground="#2E3F60",
+                highlightbackground="#E2E8F0",
                 cursor="hand2",
-                padx=12,
-                pady=11,
+                padx=16,
+                pady=14,
             )
-            row.pack(fill=tk.X, pady=6)
+            row.pack(fill=tk.X, pady=8)
 
             index_label = tk.Label(
                 row,
                 text=chr(65 + i),
                 width=3,
-                bg="#203554",
-                fg="#DBEAFE",
-                font=("Segoe UI", 10, "bold"),
+                bg="#3B82F6",
+                fg="#FFFFFF",
+                font=("Segoe UI", 11, "bold"),
                 relief=tk.FLAT,
-                padx=5,
-                pady=4,
+                padx=6,
+                pady=5,
             )
             index_label.pack(side=tk.LEFT)
 
             text_label = tk.Label(
                 row,
                 text=option,
-                bg="#15233A",
-                fg="#E2E8F0",
+                bg="#FFFFFF",
+                fg="#1E293B",
                 justify=tk.LEFT,
-                wraplength=500,
+                wraplength=600,
                 anchor=tk.W,
-                font=("Segoe UI", 11),
-                padx=10,
+                font=("Segoe UI", 12),
+                padx=14,
             )
             text_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
@@ -428,10 +446,10 @@ class QuizWindow:
 
             self.option_rows.append({"row": row, "index_label": index_label, "text_label": text_label})
 
-        self.hint_label = ttk.Label(opt_card, text="No submit button needed. One click = submitted.", style="Muted.TLabel")
-        self.hint_label.pack(anchor=tk.W, pady=(8, 0))
+        self.hint_label = ttk.Label(opt_card, text="", style="Muted.TLabel")
+        self.hint_label.pack(anchor=tk.W, pady=(6, 0))
 
-        result_card = ttk.Frame(right, padding=18, style="Card.TFrame")
+        result_card = ttk.Frame(right, padding=20, style="Card.TFrame")
         result_card.pack(fill=tk.BOTH, expand=True)
         ttk.Label(result_card, text="Result", style="H2.TLabel").pack(anchor=tk.W)
 
@@ -443,19 +461,19 @@ class QuizWindow:
 
         self.result_text = tk.Text(
             result_card,
-            height=19,
+            height=1,
             wrap=tk.WORD,
-            font=("Segoe UI", 10.5),
-            bg="#0A1220",
-            fg="#E2E8F0",
+            font=("Segoe UI", 12),
+            bg="#F1F5F9",
+            fg="#1E293B",
             relief=tk.FLAT,
-            padx=12,
-            pady=12,
+            padx=16,
+            pady=16,
             highlightthickness=1,
-            highlightbackground="#2D3B56",
-            insertbackground="#E2E8F0",
+            highlightbackground="#E2E8F0",
+            insertbackground="#1E293B",
         )
-        self.result_text.insert("1.0", "After you click an option, you will get instant result feedback, explanation, and a walkthrough demo.")
+        self.result_text.insert("1.0", "Click an option to see instant feedback and explanation.")
         self.result_text.config(state=tk.DISABLED)
         self.result_text.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
@@ -468,13 +486,13 @@ class QuizWindow:
         )
         self.add_btn.pack(fill=tk.X, pady=(14, 0))
 
-        self.note_status = ttk.Label(result_card, text="Notebook export is enabled after answering.", style="Muted.TLabel")
-        self.note_status.pack(anchor=tk.W, pady=(10, 0))
+        self.note_status = ttk.Label(result_card, text="", style="Muted.TLabel")
+        self.note_status.pack(anchor=tk.W, pady=(8, 0))
 
     def _hover_option(self, row: tk.Frame, entering: bool):
         if self.answered:
             return
-        row.configure(bg="#1D2F4E" if entering else "#15233A")
+        row.configure(bg="#EFF6FF" if entering else "#FFFFFF")
 
     def _set_option_style(self, idx: int, state: str):
         cfg = self.option_rows[idx]
@@ -483,10 +501,10 @@ class QuizWindow:
         text = cfg["text_label"]
 
         palette = {
-            "idle": ("#15233A", "#203554", "#E2E8F0", "#DBEAFE", "#2E3F60"),
-            "selected": ("#2A4062", "#355C8D", "#F8FAFC", "#DBEAFE", "#4A6999"),
-            "correct": ("#0F3A2F", "#166543", "#ECFDF5", "#D1FAE5", "#21825A"),
-            "wrong": ("#4A1E2A", "#7F1D1D", "#FEE2E2", "#FECACA", "#9F3131"),
+            "idle": ("#FFFFFF", "#3B82F6", "#1E293B", "#FFFFFF", "#E2E8F0"),
+            "selected": ("#EFF6FF", "#2563EB", "#1E40AF", "#FFFFFF", "#3B82F6"),
+            "correct": ("#ECFDF5", "#059669", "#065F46", "#FFFFFF", "#10B981"),
+            "wrong": ("#FEF2F2", "#DC2626", "#991B1B", "#FFFFFF", "#F87171"),
         }
         bg, dot_bg, text_fg, dot_fg, border = palette[state]
         row.configure(bg=bg, highlightbackground=border, cursor="arrow")
@@ -575,10 +593,28 @@ class QuizWindow:
             return
 
         try:
-            payload = _build_note_payload(self.quiz_data, int(self.selected_index))
-            pdf_path = _write_notebook_pdf(self.notebook_dir, payload)
-            self.note_status.config(text=f"Saved: {pdf_path}")
-            messagebox.showinfo("Saved", f"Notebook PDF saved:\n{pdf_path}")
+            # Save quiz data with answer for agent to process
+            pending_data = {
+                "quiz": self.quiz_data,
+                "selectedIndex": int(self.selected_index),
+                "isCorrect": int(self.selected_index) == int(self.quiz_data.get("correctIndex", 0)),
+                "timestamp": __import__("datetime").datetime.now().isoformat(),
+            }
+            
+            pending_dir = Path.home() / ".live-time-tutorial"
+            pending_dir.mkdir(parents=True, exist_ok=True)
+            pending_path = pending_dir / "pending_quiz.json"
+            
+            with open(pending_path, "w", encoding="utf-8") as f:
+                json.dump(pending_data, f, ensure_ascii=False, indent=2)
+            
+            self.note_status.config(text="Quiz saved! Tell the agent: 'Generate notebook PDF'")
+            messagebox.showinfo(
+                "Ready for Agent",
+                f"Quiz data saved to:\n{pending_path}\n\n"
+                "Tell the agent: \"Generate notebook PDF for this quiz\"\n"
+                "The agent will execute the full knowledge expansion workflow."
+            )
         except Exception as e:
             messagebox.showerror("Failed", str(e))
 

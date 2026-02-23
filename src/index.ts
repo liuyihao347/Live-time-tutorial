@@ -161,6 +161,14 @@ class QuizMCPServer {
             },
           },
           {
+            name: "get_pending_quiz",
+            description: "Get the pending quiz data from GUI (saved when user clicked 'Add to Notebook'). Use this to start the agent-first notebook PDF workflow.",
+            inputSchema: {
+              type: "object",
+              properties: {},
+            },
+          },
+          {
             name: "save_notebook_note_pdf",
             description: "Save a Notebook note as a beautiful PDF (LLM-driven).",
             inputSchema: {
@@ -235,6 +243,8 @@ class QuizMCPServer {
             return await this.handleGenerateQuiz(args as any);
           case "set_notebook_path":
             return await this.handleSetNotebookPath(args as any);
+          case "get_pending_quiz":
+            return await this.handleGetPendingQuiz();
           case "save_notebook_note_pdf":
             return await this.handleSaveNotebookNotePdf(args as any);
           default:
@@ -341,6 +351,34 @@ class QuizMCPServer {
     }
   }
 
+  private async handleGetPendingQuiz() {
+    const pendingPath = join(homedir(), ".live-time-tutorial", "pending_quiz.json");
+    
+    if (!existsSync(pendingPath)) {
+      return {
+        content: [{ type: "text", text: "No pending quiz found. Click 'Add to Notebook' in the quiz GUI first." }],
+        isError: true,
+      };
+    }
+
+    try {
+      const data = JSON.parse(readFileSync(pendingPath, "utf-8"));
+      return {
+        content: [
+          {
+            type: "text",
+            text: `Pending quiz loaded:\n${JSON.stringify(data, null, 2)}\n\nNow use the agent-first-notebook-pdf skill to generate rich content, then call save_notebook_note_pdf.`,
+          },
+        ],
+      };
+    } catch (error) {
+      return {
+        content: [{ type: "text", text: `Failed to read pending quiz: ${error instanceof Error ? error.message : String(error)}` }],
+        isError: true,
+      };
+    }
+  }
+
   private async handleSaveNotebookNotePdf(args: NotebookNotePayload) {
     const notebookDir = this.ensureNotebookDir();
     const tempDir = this.ensureTempDir();
@@ -364,9 +402,9 @@ class QuizMCPServer {
     };
 
     const payloadPath = join(tempDir, `note_payload_${Date.now()}.json`);
-    const outPath = join(notebookDir, "notes", `${filenameBase}.pdf`);
+    const outPath = join(notebookDir, `${filenameBase}.pdf`);
 
-    mkdirSync(join(notebookDir, "notes"), { recursive: true });
+    mkdirSync(notebookDir, { recursive: true });
     writeFileSync(payloadPath, JSON.stringify(payload, null, 2), "utf-8");
 
     const pyScriptPath = join(tempDir, "notebook_pdf_writer.py");
