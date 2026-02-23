@@ -148,7 +148,7 @@ Live-time-tutorial/
 └── dist/                     # Compiled output
 ```
 
-## � License
+## 📄 License
 
 [MIT](LICENSE)
 
