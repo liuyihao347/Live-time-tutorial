@@ -3,8 +3,10 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { writeFileSync, mkdirSync, existsSync, readFileSync } from "fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, readdirSync } from "fs";
 import { join, resolve, dirname } from "path";
 import { homedir } from "os";
 import { spawn } from "child_process";
@@ -59,6 +61,7 @@ class QuizMCPServer {
   private config: NotebookConfig;
   private configPath: string;
   private tempDir: string;
+  private builtinSkills: Map<string, { name: string; description: string; content: string }>;
 
   constructor() {
     this.server = new Server(
@@ -69,6 +72,7 @@ class QuizMCPServer {
       {
         capabilities: {
           tools: {},
+          prompts: {},
         },
       }
     );
@@ -76,7 +80,9 @@ class QuizMCPServer {
     this.configPath = join(homedir(), ".live-time-tutorial", "config.json");
     this.tempDir = join(homedir(), ".live-time-tutorial", "temp");
     this.config = this.loadConfig();
+    this.builtinSkills = this.loadBuiltinSkills();
     this.setupToolHandlers();
+    this.setupPromptHandlers();
 
     this.server.onerror = (error) => {
       console.error("[MCP Error]", error);
@@ -114,6 +120,89 @@ class QuizMCPServer {
       mkdirSync(this.config.notebookPath, { recursive: true });
     }
     return this.config.notebookPath;
+  }
+
+  private loadBuiltinSkills(): Map<string, { name: string; description: string; content: string }> {
+    const skills = new Map<string, { name: string; description: string; content: string }>();
+    const skillsDir = resolve(__dirname, "..", "src", "builtin-skills");
+
+    if (!existsSync(skillsDir)) {
+      const altDir = resolve(__dirname, "builtin-skills");
+      if (existsSync(altDir)) {
+        return this.loadSkillsFromDir(altDir, skills);
+      }
+      return skills;
+    }
+    return this.loadSkillsFromDir(skillsDir, skills);
+  }
+
+  private loadSkillsFromDir(
+    dir: string,
+    skills: Map<string, { name: string; description: string; content: string }>
+  ) {
+    try {
+      const entries = readdirSync(dir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory()) {
+          const mdPath = join(dir, entry.name, "skill.md");
+          if (existsSync(mdPath)) {
+            const raw = readFileSync(mdPath, "utf-8");
+            const nameMatch = raw.match(/^name:\s*(.+)$/m);
+            const descMatch = raw.match(/^description:\s*[|]?\s*\n((?:\s{2,}.+\n?)+)/m)
+              || raw.match(/^description:\s*(.+)$/m);
+            const skillName = nameMatch ? nameMatch[1].trim() : entry.name;
+            const skillDesc = descMatch
+              ? descMatch[1].replace(/^\s{2,}/gm, "").trim()
+              : "Built-in skill";
+            skills.set(skillName, { name: skillName, description: skillDesc, content: raw });
+            console.error(`[MCP] Loaded built-in skill: ${skillName}`);
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Failed to load built-in skills:", error);
+    }
+    return skills;
+  }
+
+  private setupPromptHandlers(): void {
+    this.server.setRequestHandler(ListPromptsRequestSchema, async () => {
+      const prompts = [];
+      for (const [id, skill] of this.builtinSkills) {
+        prompts.push({
+          name: id,
+          description: skill.description,
+          arguments: [
+            {
+              name: "quiz_data",
+              description: "JSON string of quiz data from get_pending_quiz (optional, auto-loaded if omitted)",
+              required: false,
+            },
+          ],
+        });
+      }
+      return { prompts };
+    });
+
+    this.server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+      const { name } = request.params;
+      const skill = this.builtinSkills.get(name);
+      if (!skill) {
+        throw new Error(`Unknown prompt: ${name}`);
+      }
+      return {
+        description: skill.description,
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text: skill.content,
+            },
+          },
+        ],
+      };
+    });
   }
 
   private ensureTempDir(): string {

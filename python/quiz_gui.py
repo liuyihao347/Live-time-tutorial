@@ -277,33 +277,29 @@ class QuizWindow:
         self.notebook_dir = Path(self.config.get("notebookPath") or str(_default_notebook_dir()))
 
         self.root = tk.Tk()
-        self.root.title(f"Live-time-tutorial")
-        
-        # Get actual screen dimensions (accounting for DPI scaling)
-        screen_width = self.root.winfo_screenwidth()
-        screen_height = self.root.winfo_screenheight()
-        
-        # Set window size to 85% of screen or max 1400x900
-        width = min(int(screen_width * 0.85), 1400)
-        height = min(int(screen_height * 0.85), 900)
-        
-        self.root.geometry(f"{width}x{height}")
-        self.root.minsize(800, 600)
-        self.root.configure(bg="#F8FAFC")
+        self.root.title("Live-time-tutorial")
 
-        # Center window after a short delay to ensure proper sizing
+        screen_w = self.root.winfo_screenwidth()
+        screen_h = self.root.winfo_screenheight()
+        width = min(int(screen_w * 0.72), 1200)
+        height = min(int(screen_h * 0.78), 820)
+
+        self.root.geometry(f"{width}x{height}")
+        self.root.minsize(720, 540)
+        self.root.configure(bg="#F0F4F8")
+
         def center_window():
-            x = (self.root.winfo_screenwidth() - width) // 2
-            y = (self.root.winfo_screenheight() - height) // 2
-            self.root.geometry(f'{width}x{height}+{x}+{y}')
-        
+            x = (screen_w - width) // 2
+            y = (screen_h - height) // 2
+            self.root.geometry(f"{width}x{height}+{x}+{y}")
+
         self.root.after(50, center_window)
-        
+
         self._setup_style()
         self.setup_ui()
         self.root.lift()
-        self.root.attributes('-topmost', True)
-        self.root.after(100, lambda: self.root.attributes('-topmost', False))
+        self.root.attributes("-topmost", True)
+        self.root.after(100, lambda: self.root.attributes("-topmost", False))
         self.root.mainloop()
 
     def _setup_style(self):
@@ -313,186 +309,146 @@ class QuizWindow:
         except Exception:
             pass
 
-        style.configure("App.TFrame", background="#F8FAFC")
+        style.configure("App.TFrame", background="#F0F4F8")
         style.configure("Card.TFrame", background="#FFFFFF")
-        style.configure("Title.TLabel", background="#FFFFFF", foreground="#0F172A", font=("Segoe UI", 22, "bold"))
-        style.configure("H2.TLabel", background="#FFFFFF", foreground="#334155", font=("Segoe UI", 14, "bold"))
-        style.configure("Muted.TLabel", background="#FFFFFF", foreground="#64748B", font=("Segoe UI", 11))
-        style.configure("Pill.TLabel", background="#DBEAFE", foreground="#1E40AF", font=("Segoe UI", 11, "bold"))
-        style.configure("Success.TLabel", background="#FFFFFF", foreground="#059669", font=("Segoe UI", 13, "bold"))
-        style.configure("Danger.TLabel", background="#FFFFFF", foreground="#DC2626", font=("Segoe UI", 13, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 12, "bold"), padding=(18, 12))
-        style.configure("Secondary.TButton", font=("Segoe UI", 11), padding=(14, 10))
+        style.configure("Title.TLabel", background="#F0F4F8", foreground="#1A365D", font=("Segoe UI", 20, "bold"))
+        style.configure("Subtitle.TLabel", background="#F0F4F8", foreground="#718096", font=("Segoe UI", 11))
+        style.configure("H2.TLabel", background="#FFFFFF", foreground="#2D3748", font=("Segoe UI", 15, "bold"))
+        style.configure("Muted.TLabel", background="#FFFFFF", foreground="#718096", font=("Segoe UI", 11))
+        style.configure("MutedBg.TLabel", background="#F0F4F8", foreground="#718096", font=("Segoe UI", 10))
+        style.configure("Pill.TLabel", background="#EBF4FF", foreground="#2B6CB0", font=("Segoe UI", 13, "bold"))
+        style.configure("Success.TLabel", background="#FFFFFF", foreground="#276749", font=("Segoe UI", 14, "bold"))
+        style.configure("Danger.TLabel", background="#FFFFFF", foreground="#C53030", font=("Segoe UI", 14, "bold"))
+        style.configure("Primary.TButton", font=("Segoe UI", 13, "bold"), padding=(20, 14))
+        style.configure("Secondary.TButton", font=("Segoe UI", 11), padding=(12, 8))
     
     def setup_ui(self):
-        app = ttk.Frame(self.root, padding=24, style="App.TFrame")
+        app = ttk.Frame(self.root, padding=16, style="App.TFrame")
         app.pack(fill=tk.BOTH, expand=True)
 
-        header = ttk.Frame(app, padding=0, style="App.TFrame")
-        header.pack(fill=tk.X)
+        # ── Header row ──
+        header = ttk.Frame(app, style="App.TFrame")
+        header.pack(fill=tk.X, pady=(0, 12))
 
-        title_card = ttk.Frame(header, padding=20, style="Card.TFrame")
-        title_card.pack(fill=tk.X)
+        ttk.Label(header, text="Live-time-tutorial", style="Title.TLabel").pack(side=tk.LEFT)
 
-        ttk.Label(title_card, text="Live-time-tutorial", style="Title.TLabel").pack(anchor=tk.W)
-        ttk.Label(title_card, text="Click any option card to submit instantly.", style="Muted.TLabel").pack(anchor=tk.W, pady=(4, 0))
-
-        notebook_row = ttk.Frame(title_card, style="Card.TFrame")
-        notebook_row.pack(fill=tk.X, pady=(14, 0))
-
+        right_hdr = ttk.Frame(header, style="App.TFrame")
+        right_hdr.pack(side=tk.RIGHT)
         self.notebook_path_label = ttk.Label(
-            notebook_row,
-            text=f"Notebook: {self.notebook_dir}",
-            style="Muted.TLabel",
+            right_hdr,
+            text=f"📁 {self.notebook_dir}",
+            style="MutedBg.TLabel",
         )
-        self.notebook_path_label.pack(side=tk.LEFT, anchor=tk.W)
+        self.notebook_path_label.pack(side=tk.LEFT, padx=(0, 8))
+        ttk.Button(right_hdr, text="Change", style="Secondary.TButton", command=self.change_notebook_path).pack(side=tk.LEFT)
 
-        ttk.Button(
-            notebook_row,
-            text="Change...",
-            style="Secondary.TButton",
-            command=self.change_notebook_path,
-        ).pack(side=tk.RIGHT)
+        # ── Main content: use PanedWindow for resizable split ──
+        pane = tk.PanedWindow(app, orient=tk.HORIZONTAL, bg="#F0F4F8", sashwidth=6, sashrelief=tk.FLAT)
+        pane.pack(fill=tk.BOTH, expand=True)
 
-        content = ttk.Frame(app, padding=(0, 20, 0, 0), style="App.TFrame")
-        content.pack(fill=tk.BOTH, expand=True)
+        left = ttk.Frame(pane, style="App.TFrame")
+        right = ttk.Frame(pane, style="App.TFrame")
+        pane.add(left, stretch="always", minsize=400)
+        pane.add(right, stretch="never", minsize=300, width=340)
 
-        # Left panel - Question and Options (60% width)
-        left = ttk.Frame(content, style="App.TFrame")
-        left.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 12))
+        # ── Question card ──
+        q_card = ttk.Frame(left, padding=18, style="Card.TFrame")
+        q_card.pack(fill=tk.X)
 
-        # Right panel - Result (40% width, min 380px)
-        right = ttk.Frame(content, style="App.TFrame")
-        right.pack(side=tk.RIGHT, fill=tk.BOTH, expand=False, padx=(12, 0))
-        right.config(width=420)
-        right.pack_propagate(False)
-
-        q_card = ttk.Frame(left, padding=20, style="Card.TFrame")
-        q_card.pack(fill=tk.BOTH, expand=True)
         ttk.Label(q_card, text="Question", style="H2.TLabel").pack(anchor=tk.W)
-
         self.question_text = tk.Text(
-            q_card,
-            height=3,
-            wrap=tk.WORD,
-            font=("Segoe UI", 13),
-            bg="#F1F5F9",
-            fg="#1E293B",
-            relief=tk.FLAT,
-            padx=16,
-            pady=16,
-            highlightthickness=1,
-            highlightbackground="#E2E8F0",
-            insertbackground="#1E293B",
+            q_card, height=3, wrap=tk.WORD,
+            font=("Segoe UI", 14), bg="#EDF2F7", fg="#1A202C",
+            relief=tk.FLAT, padx=14, pady=12,
+            highlightthickness=0, insertbackground="#1A202C",
         )
         self.question_text.insert("1.0", self.quiz_data.get("question", ""))
         self.question_text.config(state=tk.DISABLED)
-        self.question_text.pack(fill=tk.BOTH, expand=True, pady=(12, 0))
+        self.question_text.pack(fill=tk.X, pady=(10, 0))
 
-        opt_card = ttk.Frame(left, padding=20, style="Card.TFrame")
-        opt_card.pack(fill=tk.X, pady=(16, 0))
+        # ── Options card ──
+        opt_card = ttk.Frame(left, padding=18, style="Card.TFrame")
+        opt_card.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
         ttk.Label(opt_card, text="Options", style="H2.TLabel").pack(anchor=tk.W)
+        ttk.Label(opt_card, text="Click to answer", style="Muted.TLabel").pack(anchor=tk.W, pady=(2, 6))
 
         options_wrap = tk.Frame(opt_card, bg="#FFFFFF", highlightthickness=0)
-        options_wrap.pack(fill=tk.X, pady=(10, 0))
+        options_wrap.pack(fill=tk.BOTH, expand=True)
 
         for i, option in enumerate(self.quiz_data.get("options", [])):
             row = tk.Frame(
-                options_wrap,
-                bg="#FFFFFF",
-                highlightthickness=1,
-                highlightbackground="#E2E8F0",
-                cursor="hand2",
-                padx=16,
-                pady=14,
+                options_wrap, bg="#FFFFFF",
+                highlightthickness=2, highlightbackground="#E2E8F0",
+                cursor="hand2", padx=14, pady=12,
             )
-            row.pack(fill=tk.X, pady=8)
+            row.pack(fill=tk.X, pady=5)
 
             index_label = tk.Label(
-                row,
-                text=chr(65 + i),
-                width=3,
-                bg="#3B82F6",
-                fg="#FFFFFF",
-                font=("Segoe UI", 11, "bold"),
-                relief=tk.FLAT,
-                padx=6,
-                pady=5,
+                row, text=chr(65 + i), width=3,
+                bg="#4299E1", fg="#FFFFFF",
+                font=("Segoe UI", 13, "bold"),
+                relief=tk.FLAT, padx=4, pady=4,
             )
             index_label.pack(side=tk.LEFT)
 
             text_label = tk.Label(
-                row,
-                text=option,
-                bg="#FFFFFF",
-                fg="#1E293B",
-                justify=tk.LEFT,
-                wraplength=600,
-                anchor=tk.W,
-                font=("Segoe UI", 12),
-                padx=14,
+                row, text=option, bg="#FFFFFF", fg="#2D3748",
+                justify=tk.LEFT, wraplength=500, anchor=tk.W,
+                font=("Segoe UI", 14), padx=14,
             )
             text_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-            row.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
-            index_label.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
-            text_label.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
-            row.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
-            row.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
-            index_label.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
-            index_label.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
-            text_label.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
-            text_label.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
+            for w in (row, index_label, text_label):
+                w.bind("<Button-1>", lambda _e, idx=i: self.submit_answer(idx))
+                w.bind("<Enter>", lambda _e, widget=row: self._hover_option(widget, True))
+                w.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
 
             self.option_rows.append({"row": row, "index_label": index_label, "text_label": text_label})
 
         self.hint_label = ttk.Label(opt_card, text="", style="Muted.TLabel")
-        self.hint_label.pack(anchor=tk.W, pady=(6, 0))
+        self.hint_label.pack(anchor=tk.W, pady=(4, 0))
 
-        result_card = ttk.Frame(right, padding=20, style="Card.TFrame")
+        # ── Result card ──
+        result_card = ttk.Frame(right, padding=18, style="Card.TFrame")
         result_card.pack(fill=tk.BOTH, expand=True)
+
         ttk.Label(result_card, text="Result", style="H2.TLabel").pack(anchor=tk.W)
 
         self.result_badge = ttk.Label(result_card, text="Waiting for answer", style="Pill.TLabel")
         self.result_badge.pack(anchor=tk.W, pady=(10, 0))
 
-        self.result_status = ttk.Label(result_card, text="", style="Muted.TLabel")
+        self.result_status = ttk.Label(result_card, text="", style="Muted.TLabel", wraplength=280)
         self.result_status.pack(anchor=tk.W, pady=(6, 0))
 
         self.result_text = tk.Text(
-            result_card,
-            height=1,
-            wrap=tk.WORD,
-            font=("Segoe UI", 12),
-            bg="#F1F5F9",
-            fg="#1E293B",
-            relief=tk.FLAT,
-            padx=16,
-            pady=16,
-            highlightthickness=1,
-            highlightbackground="#E2E8F0",
-            insertbackground="#1E293B",
+            result_card, height=1, wrap=tk.WORD,
+            font=("Segoe UI", 13), bg="#EDF2F7", fg="#2D3748",
+            relief=tk.FLAT, padx=14, pady=12,
+            highlightthickness=0, insertbackground="#2D3748",
         )
-        self.result_text.insert("1.0", "Click an option to see instant feedback and explanation.")
+        self.result_text.insert("1.0", "Click an option to see instant feedback.")
         self.result_text.config(state=tk.DISABLED)
         self.result_text.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
         self.add_btn = ttk.Button(
-            result_card,
-            text="Add to My Notebook (PDF)",
-            style="Primary.TButton",
-            command=self.add_to_notebook,
-            state=tk.DISABLED,
+            result_card, text="📝 Add to My Notebook",
+            style="Primary.TButton", command=self.add_to_notebook, state=tk.DISABLED,
         )
         self.add_btn.pack(fill=tk.X, pady=(14, 0))
 
-        self.note_status = ttk.Label(result_card, text="", style="Muted.TLabel")
+        self.note_status = ttk.Label(result_card, text="", style="Muted.TLabel", wraplength=280)
         self.note_status.pack(anchor=tk.W, pady=(8, 0))
 
     def _hover_option(self, row: tk.Frame, entering: bool):
         if self.answered:
             return
-        row.configure(bg="#EFF6FF" if entering else "#FFFFFF")
+        bg = "#EBF8FF" if entering else "#FFFFFF"
+        border = "#4299E1" if entering else "#E2E8F0"
+        row.configure(bg=bg, highlightbackground=border)
+        for child in row.winfo_children():
+            if isinstance(child, tk.Label) and child.cget("bg") != "#4299E1":
+                child.configure(bg=bg)
 
     def _set_option_style(self, idx: int, state: str):
         cfg = self.option_rows[idx]
@@ -501,10 +457,10 @@ class QuizWindow:
         text = cfg["text_label"]
 
         palette = {
-            "idle": ("#FFFFFF", "#3B82F6", "#1E293B", "#FFFFFF", "#E2E8F0"),
-            "selected": ("#EFF6FF", "#2563EB", "#1E40AF", "#FFFFFF", "#3B82F6"),
-            "correct": ("#ECFDF5", "#059669", "#065F46", "#FFFFFF", "#10B981"),
-            "wrong": ("#FEF2F2", "#DC2626", "#991B1B", "#FFFFFF", "#F87171"),
+            "idle": ("#FFFFFF", "#4299E1", "#2D3748", "#FFFFFF", "#E2E8F0"),
+            "selected": ("#EBF8FF", "#3182CE", "#2A4365", "#FFFFFF", "#4299E1"),
+            "correct": ("#F0FFF4", "#38A169", "#22543D", "#FFFFFF", "#48BB78"),
+            "wrong": ("#FFF5F5", "#E53E3E", "#9B2C2C", "#FFFFFF", "#FC8181"),
         }
         bg, dot_bg, text_fg, dot_fg, border = palette[state]
         row.configure(bg=bg, highlightbackground=border, cursor="arrow")
