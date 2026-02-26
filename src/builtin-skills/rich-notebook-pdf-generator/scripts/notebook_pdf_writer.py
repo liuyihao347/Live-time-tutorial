@@ -16,7 +16,7 @@ try:
     from reportlab.lib.units import mm
     from reportlab.lib import colors
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image, Flowable
     from reportlab.graphics.shapes import Drawing
     from reportlab.graphics.charts.barcharts import VerticalBarChart
     from reportlab.pdfbase import pdfmetrics
@@ -283,11 +283,75 @@ def _parse_table(lines: list, start_idx: int) -> tuple:
     return rows, i
 
 
+import unicodedata
+
+
+class _FlowchartBlock(Flowable):
+    """Render a block of text-art flowchart lines using canvas drawing
+    with a uniform character-cell grid so that box-drawing characters
+    and CJK text align perfectly."""
+
+    def __init__(self, lines, font_normal, font_symbol, font_size=9, cell_w=None, line_h=None, text_color=None):
+        super().__init__()
+        self._lines = lines
+        self._font_normal = font_normal
+        self._font_symbol = font_symbol
+        self._font_size = font_size
+        # Use a uniform half-width cell; CJK chars occupy 2 cells.
+        self._cell_w = cell_w or font_size * 0.55
+        self._line_h = line_h or font_size * 1.35
+        self._text_color = text_color or colors.HexColor("#374151")
+
+        # Pre-compute dimensions
+        max_cols = 0
+        for ln in lines:
+            cols = sum(2 if self._is_wide(c) else 1 for c in ln)
+            if cols > max_cols:
+                max_cols = cols
+        self.width = max_cols * self._cell_w + 4  # small padding
+        self.height = len(lines) * self._line_h + 4
+
+    @staticmethod
+    def _is_wide(ch):
+        """Return True for characters that should occupy 2 grid cells."""
+        ea = unicodedata.east_asian_width(ch)
+        return ea in ('W', 'F')
+
+    def wrap(self, availWidth, availHeight):
+        return min(self.width, availWidth), self.height
+
+    def draw(self):
+        c = self.canv
+        c.saveState()
+        c.setFillColor(self._text_color)
+        y = self.height - self._line_h  # start from top
+        for ln in self._lines:
+            x = 0.0
+            for ch in ln:
+                if ch == ' ':
+                    x += self._cell_w
+                    continue
+                is_sym = _is_symbol_char(ch)
+                font = self._font_symbol if is_sym else self._font_normal
+                c.setFont(font, self._font_size)
+                w = 2 * self._cell_w if self._is_wide(ch) else self._cell_w
+                # Centre the glyph within its cell(s)
+                glyph_w = c.stringWidth(ch, font, self._font_size)
+                c.drawString(x + (w - glyph_w) / 2, y, ch)
+                x += w
+            y -= self._line_h
+        c.restoreState()
+
+
 def _is_flowchart_line(line: str) -> bool:
     """Check if line is part of a flowchart using box-drawing / arrow characters."""
     stripped = line.strip()
     if not stripped:
         return False
+    # 如果包含任何 box-drawing 字符（0x2500-0x257F），直接认为是流程图行
+    if any(0x2500 <= ord(c) <= 0x257F for c in stripped):
+        return True
+    # 其他 symbol 字符（箭头、几何形状等）需要至少2个才算流程图
     sym_count = sum(1 for c in stripped if _is_symbol_char(c))
     return sym_count >= 2
 
@@ -318,10 +382,12 @@ def _render_markdown(story, markdown_text: str, h_style, h3_style, body_style, q
         nonlocal flowchart_buffer
         if flowchart_buffer:
             story.append(Spacer(1, 4))
-            for fline in flowchart_buffer:
-                # Keep the whole line in one font to preserve box alignment.
-                safe = _escape_html_preserve_space(fline)
-                story.append(Paragraph(safe or "&nbsp;", mono_style))
+            block = _FlowchartBlock(
+                flowchart_buffer,
+                font_normal=font_normal,
+                font_symbol=font_symbol,
+            )
+            story.append(block)
             story.append(Spacer(1, 4))
             flowchart_buffer = []
 
