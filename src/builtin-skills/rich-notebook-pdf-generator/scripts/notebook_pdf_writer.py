@@ -555,29 +555,14 @@ def main() -> int:
     
     if len(sys.argv) < 2:
         print("Usage: python notebook_pdf_writer.py <payload.json> [out.pdf]")
-        print("       python notebook_pdf_writer.py - <topic> [out.pdf]  (read JSON from stdin)")
-        print("       echo '{...}' | python notebook_pdf_writer.py - [out.pdf]")
         return 1
     
-    # Determine if reading from stdin
-    input_source = sys.argv[1]
-    read_from_stdin = input_source == "-"
+    payload_path = Path(sys.argv[1])
     
-    # Parse payload
+    # Parse payload to get topic for default filename
     try:
-        if read_from_stdin:
-            # Read JSON from stdin
-            stdin_data = sys.stdin.read()
-            payload = json.loads(stdin_data)
-            topic = payload.get("topic", "notebook")
-        else:
-            # Read from file
-            payload_path = Path(input_source)
-            payload = json.loads(payload_path.read_text(encoding="utf-8"))
-            topic = payload.get("topic", "notebook")
-    except json.JSONDecodeError as e:
-        print(f"Error parsing JSON: {e}")
-        return 1
+        payload = json.loads(payload_path.read_text(encoding="utf-8"))
+        topic = payload.get("topic", "notebook")
     except Exception as e:
         print(f"Error reading payload: {e}")
         return 1
@@ -601,16 +586,13 @@ def main() -> int:
         print(f"Error generating PDF: {e}")
         return 1
     
-    # If reading from file (legacy mode), cleanup files
-    if not read_from_stdin:
-        # Delete JSON intermediate file and screenshot after successful PDF generation
-        try:
-            payload_path = Path(input_source)
-            if payload_path.exists():
-                payload_path.unlink()
-                print(f"Cleaned up: {payload_path}")
-        except Exception as e:
-            print(f"Warning: Could not delete JSON file: {e}")
+    # Delete JSON intermediate file and screenshot after successful PDF generation
+    try:
+        if payload_path.exists():
+            payload_path.unlink()
+            print(f"Cleaned up: {payload_path}")
+    except Exception as e:
+        print(f"Warning: Could not delete JSON file: {e}")
     
     # Delete screenshot file since it's now embedded in the PDF
     screenshot_path = payload.get("screenshotPath")
