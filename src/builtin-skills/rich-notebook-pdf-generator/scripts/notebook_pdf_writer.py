@@ -77,8 +77,9 @@ def _register_chinese_fonts():
     # Register symbol font for Unicode characters (arrows, box drawing, etc.)
     symbol_font_name = normal_font_name  # fallback
     symbol_font_options = [
-        ("SegoeUI", "segoeui.ttf"),  # Windows 10/11 现代字体，支持完整 Unicode
-        ("ArialUnicodeMS", "ARIALUNI.ttf"),  # Arial Unicode MS
+        ("SegoeUISymbol", "segoeuisymbol.ttf"),  # Windows 专用符号字体，支持完整 Unicode 符号
+        ("ArialUnicodeMS", "ARIALUNI.ttf"),  # Arial Unicode MS - 最完整的 Unicode 支持
+        ("SegoeUI", "segoeui.ttf"),  # Windows 10/11 现代字体
         ("DejaVuSans", "DejaVuSans.ttf"),  # DejaVu Sans
         ("LucidaSansUnicode", "l_10646.ttf"),  # Lucida Sans Unicode
     ]
@@ -116,7 +117,8 @@ def _safe_hex_color(value: str | None, fallback: str) -> str:
 def _render_mixed_text(story, text: str, normal_font: str, symbol_font: str, style):
     """Render text with mixed Chinese and symbols using appropriate fonts."""
     # Box drawing and arrow characters need symbol font
-    special_chars = set('┌┐└┘├┤┬┴─│┏┓┗┛┣┫┳┻━┃╔╗╚╝╠╣╦╩═║▲▼◄►←→↑↓')
+    # 包含：框线字符、三角形箭头、实心箭头、双线箭头、其他常用箭头
+    special_chars = set('┌┐└┘├┤┬┴─│┏┓┗┛┣┫┳┻━┃╔╗╚╝╠╣╦╩═║▲▼◄►←→↑↓↔↕↖↗↘↙⇐⇒⇑⇓⇔⇕⇧⇩➜➝➞➟➠➡➢➣➤➥➦➧➨➩➪➫➬➭➮➯➱➲➳➴➵➶➷➸➹➺➻➼➽➾➿')
     
     # If no special chars, use normal rendering
     if not any(c in special_chars for c in text):
@@ -227,14 +229,17 @@ def _is_flowchart_line(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
         return False
-    # Must contain box drawing characters
+    # Must contain box drawing characters or arrows
     box_chars = set('┌┐└┘├┤┬┴─│┏┓┗┛┣┫┳┻━┃╔╗╚╝╠╣╦╩═║')
-    has_box = any(c in box_chars for c in stripped)
-    if not has_box:
+    arrow_chars = set('▲▼◄►←→↑↓↔↕↖↗↘↙⇐⇒⇑⇓⇔⇕⇧⇩➜➝➞➟➠➡➢➣➤➥➦➧➨➩➪➫➬➭➮➯➱➲➳➴➵➶➷➸➹➺➻➼➽➾➿')
+    special_chars = box_chars | arrow_chars
+    
+    has_special = any(c in special_chars for c in stripped)
+    if not has_special:
         return False
-    # Count box chars vs total chars - should be significant portion
-    box_count = sum(1 for c in stripped if c in box_chars)
-    return box_count >= 2  # At least 2 box chars
+    # Count special chars vs total chars - should be significant portion
+    special_count = sum(1 for c in stripped if c in special_chars)
+    return special_count >= 1  # At least 1 special char
 
 
 def _render_markdown(story, markdown_text: str, h_style, h3_style, body_style, quote_style, code_style, mono_style, table_style, mono_box_style, font_normal: str, font_symbol: str):
