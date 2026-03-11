@@ -21,23 +21,26 @@
 ## 🧠 Highlights
 
 - **Instant Feedback** - Clear result status, explanation, and walkthrough demo
+- **User Feedback Loop** - Type a follow-up prompt at the bottom of the quiz; agent responds and generates another quiz
 - **Notebook Export** - Click "Save to Notebook" to auto-generate PDF
 - **Auto PDF Generation** - When user clicks Save to Notebook, PDF is generated immediately after quiz closes
-- **Easy Integration** - Works with Cursor, Kilo Code, Windsuraf & more
+- **Easy Integration** - Works with Cursor, Kilo Code, Windsurf & more
 
 ## 🔄 How It Works
 
 ```
-Task Complete → AI Summarizes → Generate Quiz → User Answers in GUI 
+Task Complete → AI Summarizes → Generate Quiz → User Answers in GUI
+→ [Optional: type feedback prompt] → Agent responds → Generate another Quiz (loop)
 → [If Save to Notebook clicked] → PDF Auto-generated → Saved to ~/Desktop/Notebook/
 ```
 
 1. **Task Trigger** - AI extracts key knowledge points after finishing a task
 2. **Quiz Generation** - Creates a multiple-choice question and opens GUI
 3. **User Answers** - Click an option in the GUI to submit
-4. **Save to Notebook** - User clicks button to save screenshot (shows "Great! Check {path} later.")
+4. **User Feedback** (optional) - Type a follow-up prompt in the **Feedback to Agent** box at the bottom
 5. **Window Closes** - MCP waits for GUI window to close
-6. **Auto PDF** - If Save to Notebook was clicked, agent automatically creates rich PDF with screenshot as header
+6. **Feedback Loop** - If feedback was entered, agent responds and automatically calls `generate_quiz` again
+7. **Auto PDF** - If Save to Notebook was clicked (and no feedback), agent creates rich PDF with screenshot as header
 
 ## 🚀 Installation
 
@@ -77,8 +80,9 @@ Restart your IDE to activate the MCP service.
 - **Auto-trigger**: AI asks for a quiz after completing tasks
 - **Manual trigger**: Type "give me a quiz" or "quiz" in chat
 - **Answer in GUI**: Click an option card to submit instantly
+- **Leave feedback** (optional): Type a follow-up prompt in the **Feedback to Agent** box at the bottom — agent will respond and generate another quiz
 - **Save to Notebook**: Click **Save to Notebook** after answering
-- **Close window**: Close the GUI window when done
+- **Close window**: Close the GUI window when done (leave feedback box empty to end the loop)
 - **PDF auto-generated**: If you clicked Save to Notebook, a PDF will be created automatically
 
 All files are saved directly to `~/Desktop/Notebook/`:
@@ -93,10 +97,12 @@ Generate a quiz and open the GUI window. MCP waits for window to close, then ret
 - Explanation and knowledge points
 - Whether Save to Notebook was clicked
 - Screenshot path (if saved)
+- User feedback prompt (if entered)
 
 **Behavior:**
+- If user entered **feedback** → Agent responds to feedback, then calls `generate_quiz` again
 - If user clicked **Save to Notebook** → Agent automatically calls `save_notebook_note_pdf`
-- If user did NOT click → Agent summarizes and ends conversation
+- If user did neither → Agent summarizes and ends conversation
 
 ### `set_notebook_path`
 

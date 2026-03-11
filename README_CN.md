@@ -21,6 +21,7 @@
 ## 🧠 特性
 
 - **即时反馈** - 答题后立即显示对错、解析和思路演示
+- **用户反馈循环** - 在测验底部输入追问prompt，agent回复后自动生成新一轮测验
 - **一键存笔记** - 点击"Save to Notebook"保存截图并自动生成PDF
 - **自动PDF生成** - 用户点击保存后，测验窗口关闭时自动调用AI生成PDF笔记
 - **轻松集成** - 支持Cursor、Kilo Code、Windsurf等AI IDE
@@ -29,15 +30,17 @@
 
 ```
 任务完成 → AI总结知识点 → 生成测验 → 用户在GUI作答
+→ [可选：输入反馈prompt] → Agent回复 → 再次生成测验（循环）
 → [如果点击了Save to Notebook] → PDF自动生成 → 保存到 ~/Desktop/Notebook/
 ```
 
 1. **任务结束触发** - AI完成任务后，总结最精华的知识点
 2. **生成测验** - 创建一道多选题并打开GUI窗口
 3. **用户作答** - 在GUI中点击选项卡片提交答案
-4. **保存到笔记** - 用户点击"Save to Notebook"按钮（显示"Great! Check {path} later."）
+4. **用户反馈**（可选）- 在底部的 **Feedback to Agent** 输入框输入追问prompt
 5. **窗口关闭** - MCP等待GUI窗口关闭
-6. **自动PDF** - 如果用户点击了保存，AI自动创建带截图的丰富PDF笔记
+6. **反馈循环** - 如果填写了反馈，agent回复后自动再次调用 `generate_quiz`
+7. **自动PDF** - 如果用户点击了保存（且无反馈），AI自动创建带截图的PDF笔记
 
 ## 🚀 部署安装
 
@@ -77,8 +80,9 @@ npm run build
 - **自动触发**：AI 完成任务后会询问是否需要测验
 - **手动触发**：直接在对话中输入 "给我出个测验" 或 "quiz"
 - **GUI作答**：点击选项卡片直接提交答案
+- **留言反馈**（可选）：在底部 **Feedback to Agent** 输入框输入追问prompt，agent回复后自动生成新测验
 - **保存截图**：作答后点击 **Save to Notebook** 按钮
-- **关闭窗口**：完成后关闭GUI窗口
+- **关闭窗口**：完成后关闭GUI窗口（不填写反馈即可终止循环）
 - **PDF自动生成**：如果点击了Save to Notebook，PDF会自动生成
 
 所有文件直接保存到 `~/Desktop/Notebook/`：
@@ -93,10 +97,12 @@ npm run build
 - 解析和知识点总结
 - 是否点击了Save to Notebook
 - 截图路径（如果保存了）
+- 用户反馈prompt（如果填写了）
 
 **行为逻辑：**
+- 用户填写了**反馈** → Agent回复反馈内容，然后再次调用 `generate_quiz`
 - 用户点击了 **Save to Notebook** → Agent 自动调用 `save_notebook_note_pdf`
-- 用户未点击 → Agent 总结结果并结束对话
+- 用户两者均未操作 → Agent 总结结果并结束对话
 
 ### `set_notebook_path`
 

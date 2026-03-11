@@ -60,25 +60,6 @@ def _extract_points(text: str) -> list[str]:
     return [p.strip() for p in text.replace("\n", "|").split("|") if p.strip()]
 
 
-def _build_demo_steps(explanation: str, selected_text: str, correct_text: str) -> list[str]:
-    steps = []
-    if explanation:
-        sentences = [s.strip() for s in explanation.replace("\n", " ").split(".") if s.strip()]
-        for sentence in sentences[:3]:
-            steps.append(sentence)
-
-    if not steps:
-        steps = [
-            "Understand what the question is really asking.",
-            "Compare each option with the required time complexity.",
-            "Choose the option that satisfies both correctness and efficiency.",
-        ]
-
-    steps.append(f"Your selected option: {selected_text}")
-    steps.append(f"Best option: {correct_text}")
-    return steps
-
-
 def _capture_gui_screenshot(root: tk.Tk, notebook_dir: Path, topic: str) -> Path:
     """Capture GUI screenshot and save as PNG."""
     if not HAS_PIL:
@@ -115,6 +96,7 @@ class QuizWindow:
         self.screenshot_path = None
         self.option_rows = []
         self._density_job = None
+        self.user_feedback = ""
 
         self.config = _load_config()
         self.notebook_dir = Path(self.config.get("notebookPath") or str(_default_notebook_dir()))
@@ -132,10 +114,12 @@ class QuizWindow:
         x = (sw - width) // 2
         y = max(0, (sh - height) // 2 - 10)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
-        self.root.minsize(960, 680)
+        self.root.minsize(1024, 840)
         
         self._setup_style()
         self.setup_ui()
+        self.root.update_idletasks()
+        self._update_option_density()
         self.root.lift()
         self.root.attributes('-topmost', True)
         self.root.after(100, lambda: self.root.attributes('-topmost', False))
@@ -158,8 +142,23 @@ class QuizWindow:
         style.configure("Pill.TLabel", background="#1A2A44", foreground="#93C5FD", font=("Segoe UI", 9, "bold"))
         style.configure("Success.TLabel", background="#101B2D", foreground="#34D399", font=("Segoe UI", 11, "bold"))
         style.configure("Danger.TLabel", background="#101B2D", foreground="#F87171", font=("Segoe UI", 11, "bold"))
-        style.configure("Primary.TButton", font=("Segoe UI", 10, "bold"), padding=(14, 8))
-        style.configure("Secondary.TButton", font=("Segoe UI", 9), padding=(8, 4))
+        
+        style.configure("Primary.TButton", 
+                        background="#F8FAFC", 
+                        foreground="#0A1220", 
+                        font=("Segoe UI", 10, "bold"), 
+                        padding=(14, 8))
+        style.map("Primary.TButton", 
+                  background=[("active", "#E2E8F0"), ("disabled", "#334155")],
+                  foreground=[("disabled", "#9FB0CB")])
+
+        style.configure("Secondary.TButton", 
+                        background="#F8FAFC", 
+                        foreground="#0A1220", 
+                        font=("Segoe UI", 10, "bold"), 
+                        padding=(10, 6))
+        style.map("Secondary.TButton", 
+                  background=[("active", "#E2E8F0")])
     
     def setup_ui(self):
         app = ttk.Frame(self.root, padding=(16, 10), style="App.TFrame")
@@ -190,12 +189,13 @@ class QuizWindow:
         self.notebook_path_label.pack(side=tk.RIGHT, padx=(0, 10))
 
         # ── Two-column content using PanedWindow for flexible split ──
-        content = ttk.Frame(app, padding=(0, 10, 0, 0), style="App.TFrame")
+        content = ttk.Frame(app, padding=(0, 10, 0, 6), style="App.TFrame")
         content.pack(fill=tk.BOTH, expand=True)
 
         content.columnconfigure(0, weight=2)
         content.columnconfigure(1, weight=3)
-        content.rowconfigure(0, weight=1)
+        content.rowconfigure(0, weight=5)
+        content.rowconfigure(1, weight=1)
 
         # ── Left column: Question + Options (fills vertically) ──
         left = ttk.Frame(content, style="Card.TFrame", padding=14)
@@ -229,7 +229,7 @@ class QuizWindow:
         opt_section.grid(row=2, column=0, sticky="nsew", pady=(0, 0))
         opt_section.rowconfigure(1, weight=1)
         opt_section.columnconfigure(0, weight=1)
-        opt_section.bind("<Configure>", self._schedule_option_density_update)
+        opt_section.bind("<Configure>", self._update_option_density)
 
         ttk.Label(opt_section, text="Select an option", style="H2.TLabel").grid(row=0, column=0, sticky="w", pady=(0, 6))
 
@@ -290,7 +290,6 @@ class QuizWindow:
         self.hint_label = tk.Label(options_wrap, text="Click any option to submit your answer",
                                    bg="#101B2D", fg="#9FB0CB", font=("Segoe UI", 9), anchor=tk.W)
         self.hint_label.pack(fill=tk.X, pady=(6, 0))
-        self.root.after(120, self._update_option_density)
 
         # ── Right column: Result panel (expands to fill) ──
         right = ttk.Frame(content, style="Card.TFrame", padding=14)
@@ -333,27 +332,96 @@ class QuizWindow:
             text="Save to Notebook",
             style="Primary.TButton",
             command=self.save_screenshot,
-            state=tk.DISABLED,
+            state=tk.NORMAL,  # Button is always normal to capture click
         )
         self.add_btn.grid(row=0, column=0, sticky="w")
 
         self.note_status = ttk.Label(bottom, text="Close the window to continue", style="Muted.TLabel")
         self.note_status.grid(row=0, column=1, sticky="w", padx=(12, 0))
 
-    def _schedule_option_density_update(self, _event=None):
-        if self._density_job is not None:
-            try:
-                self.root.after_cancel(self._density_job)
-            except Exception:
-                pass
-        self._density_job = self.root.after(60, self._update_option_density)
+        # ── Feedback section spanning both columns ──
+        feedback_frame = ttk.Frame(content, style="Card.TFrame", padding=(14, 10))
+        feedback_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
+        feedback_frame.columnconfigure(0, weight=1)
+        feedback_frame.rowconfigure(1, weight=1)
 
-    def _update_option_density(self):
-        self._density_job = None
+        fb_header = ttk.Frame(feedback_frame, style="Card.TFrame")
+        fb_header.grid(row=0, column=0, sticky="ew", pady=(0, 6))
+        fb_header.columnconfigure(0, weight=1)
+
+        ttk.Label(fb_header, text="Feedback to Agent", style="H2.TLabel").grid(row=0, column=0, sticky="w")
+        
+        # Action button container
+        btn_frame = ttk.Frame(fb_header, style="Card.TFrame")
+        btn_frame.grid(row=0, column=1, sticky="e")
+        
+        self.submit_fb_btn = ttk.Button(
+            btn_frame,
+            text="Enter",
+            style="Primary.TButton",
+            command=self._on_close
+        )
+        self.submit_fb_btn.pack(side=tk.RIGHT)
+
+        ttk.Label(
+            fb_header,
+            text="Optional: Enter a follow-up prompt for the agent.",
+            style="Muted.TLabel",
+        ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+
+        self.feedback_text = tk.Text(
+            feedback_frame,
+            height=3,
+            wrap=tk.WORD,
+            font=("Segoe UI", 11),
+            bg="#0A1220",
+            fg="#E2E8F0",
+            relief=tk.FLAT,
+            padx=10,
+            pady=8,
+            highlightthickness=1,
+            highlightbackground="#2D3B56",
+            insertbackground="#E2E8F0",
+        )
+        self.feedback_text.grid(row=1, column=0, sticky="nsew")
+        self.feedback_text.bind("<FocusIn>", self._on_feedback_focus_in)
+        self.feedback_text.bind("<FocusOut>", self._on_feedback_focus_out)
+        self.feedback_text.bind("<Return>", self._on_feedback_enter)
+        self.feedback_text.bind("<Shift-Return>", lambda e: None) # Allow shift-enter for newlines
+        
+        self._feedback_placeholder = ""
+        self._feedback_placeholder_active = True
+        self.feedback_text.insert("1.0", self._feedback_placeholder)
+        self.feedback_text.config(fg="#5A6F8A")
+
+
+    def _on_feedback_focus_in(self, _event=None):
+        if self._feedback_placeholder_active:
+            self.feedback_text.delete("1.0", tk.END)
+            self.feedback_text.config(fg="#E2E8F0")
+            self._feedback_placeholder_active = False
+
+    def _on_feedback_focus_out(self, _event=None):
+        content = self.feedback_text.get("1.0", tk.END).strip()
+        if not content:
+            self.feedback_text.insert("1.0", self._feedback_placeholder)
+            self.feedback_text.config(fg="#5A6F8A")
+            self._feedback_placeholder_active = True
+
+    def _on_feedback_enter(self, event):
+        if not event.state & 0x0001: # Not holding shift
+            self._on_close()
+            return "break" # Prevent default newline
+        return None
+
+    def _update_option_density(self, _event=None):
         count = len(self.option_rows)
         if count == 0 or not hasattr(self, "options_wrap"):
             return
 
+        # Always update geometry synchronously
+        self.options_wrap.update_idletasks()
+        
         available_height = self.options_wrap.winfo_height()
         available_width = self.options_wrap.winfo_width()
         if available_height <= 1:
@@ -443,22 +511,17 @@ class QuizWindow:
             else "Review the explanation to understand the correct approach."
         )
 
-        demo_steps = _build_demo_steps(explanation, selected_answer, correct_answer)
-
         lines = [
-            f"Result: {badge}",
-            "",
             f"Your answer: {chr(65 + selected)}. {selected_answer}",
             f"Correct answer: {chr(65 + correct)}. {correct_answer}",
-            "",
-            "Clear Explanation",
-            explanation if explanation else "(No explanation provided)",
-            "",
-            "Walkthrough Demo",
         ]
-
-        for i, step in enumerate(demo_steps, start=1):
-            lines.append(f"{i}. {step}")
+        
+        if explanation:
+            lines.extend([
+                "",
+                "Clear Explanation",
+                explanation
+            ])
 
         if points:
             lines.append("")
@@ -473,12 +536,17 @@ class QuizWindow:
         self.result_text.config(state=tk.DISABLED)
 
         self.is_correct = is_correct
-        self.add_btn.config(state=tk.NORMAL)
-        self.note_status.config(text="Close the window if you don't need notes")
+        self.note_status.config(text="Close the window if you don't need notes", foreground="#9FB0CB")
 
     def _on_close(self):
         """Handle window close: always save quiz result if user answered."""
+        if not self._feedback_placeholder_active:
+            self.user_feedback = self.feedback_text.get("1.0", tk.END).strip()
+        else:
+            self.user_feedback = ""
         if self.answered and self.selected_index is not None:
+            self._save_quiz_result()
+        elif self.user_feedback:
             self._save_quiz_result()
         self.root.destroy()
 
@@ -493,20 +561,22 @@ class QuizWindow:
                     result_path = quiz_file.parent / f"{quiz_file.stem}.result.json"
                 selected = self.selected_index
                 correct = int(self.quiz_data.get("correctIndex", 0))
+                options = self.quiz_data.get("options", [])
                 result = {
                     "quizId": self.quiz_data.get("id"),
                     "question": self.quiz_data.get("question"),
-                    "options": self.quiz_data.get("options", []),
+                    "options": options,
                     "selectedIndex": selected,
-                    "selectedAnswer": self.quiz_data.get("options", [])[selected] if selected is not None and selected >= 0 else None,
+                    "selectedAnswer": options[selected] if selected is not None and 0 <= selected < len(options) else None,
                     "correctIndex": correct,
-                    "correctAnswer": self.quiz_data.get("options", [])[correct],
+                    "correctAnswer": options[correct] if 0 <= correct < len(options) else None,
                     "isCorrect": self.is_correct,
                     "explanation": self.quiz_data.get("explanation"),
                     "knowledgeSummary": self.quiz_data.get("knowledgeSummary"),
                     "category": self.quiz_data.get("category"),
                     "savedToNotebook": self.saved_to_notebook,
                     "screenshotPath": str(self.screenshot_path) if self.screenshot_path else None,
+                    "userFeedback": self.user_feedback,
                     "answeredAt": datetime.now().isoformat(),
                 }
                 result_path.write_text(json.dumps(result, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -515,6 +585,7 @@ class QuizWindow:
 
     def save_screenshot(self):
         if not self.answered or self.selected_index is None:
+            self.note_status.config(text="Please answer the quiz first :)", foreground="#F87171")
             return
 
         try:
