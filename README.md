@@ -24,11 +24,10 @@
 
 ## 🧠 Highlights
 
-- **Instant Feedback** - Clear result status, explanation, and walkthrough demo
+- **Instant Feedback** - Automatically generates quizzes based on task context, with immediate result display, explanation, and walkthrough demo
 - **User Feedback Loop** - Type a follow-up prompt at the bottom of the quiz; agent responds and generates another quiz
-- **Notebook Export** - Click "Save to Notebook" to auto-generate PDF
-- **Auto PDF Generation** - When user clicks Save to Notebook, PDF is generated immediately after quiz closes
-- **Easy Integration** - Works with Cursor, Kilo Code, Windsurf & more
+- **Auto PDF Notebook Generation** - Click "Save to Notebook" to auto-generate PDF with screenshot
+- **Easy Integration** - Works with Windsurf, Cursor, Kilo Code, and more
 
 ## 🔄 How It Works
 
@@ -37,14 +36,6 @@ Task Complete → AI Summarizes → Generate Quiz → User Answers in GUI
 → [Optional: type feedback prompt] → Agent responds → Generate another Quiz (loop)
 → [If Save to Notebook clicked] → PDF Auto-generated → Saved to ~/Desktop/Notebook/
 ```
-
-1. **Task Trigger** - AI extracts key knowledge points after finishing a task
-2. **Quiz Generation** - Creates a multiple-choice question and opens GUI
-3. **User Answers** - Click an option in the GUI to submit
-4. **User Feedback** (optional) - Type a follow-up prompt in the **Feedback to Agent** box at the bottom
-5. **Window Closes** - MCP waits for GUI window to close
-6. **Feedback Loop** - If feedback was entered, agent responds and automatically calls `generate_quiz` again
-7. **Auto PDF** - If Save to Notebook was clicked (and no feedback), agent creates rich PDF with screenshot as header
 
 ## 🚀 Installation
 
@@ -56,11 +47,6 @@ npm run build
 
 ### 2. Configure IDE
 Add to your IDE's MCP config, replacing `[PATH_TO_PROJECT]` with the actual path:
-
-**Config locations:**
-- **Cursor**: `.cursor/mcp.json`
-- **Windsurf**: `.windsurf/mcp.json`
-- **VS Code / Kilo Code**: `.vscode/mcp.json`
 
 **Configuration:**
 ```json
@@ -76,7 +62,10 @@ Add to your IDE's MCP config, replacing `[PATH_TO_PROJECT]` with the actual path
 }
 ```
 
-### 3. Restart IDE
+### 3. Add global rule (Recommended)
+Add the global rule (rules\task-feedback.md) to the agent to increase the trigger frequency of this MCP.
+
+### 4. Restart IDE
 Restart your IDE to activate the MCP service.
 
 ## 📖 Usage
@@ -84,9 +73,7 @@ Restart your IDE to activate the MCP service.
 - **Auto-trigger**: AI asks for a quiz after completing tasks
 - **Manual trigger**: Type "give me a quiz" or "quiz" in chat
 - **Answer in GUI**: Click an option card to submit instantly
-- **Leave feedback** (optional): Type a follow-up prompt in the **Feedback to Agent** box at the bottom — agent will respond and generate another quiz
-- **Save to Notebook**: Click **Save to Notebook** after answering
-- **Close window**: Close the GUI window when done (leave feedback box empty to end the loop)
+- **Leave feedback** (optional): Type a follow-up prompt in the **Feedback to Agent** box at the bottom
 - **PDF auto-generated**: If you clicked Save to Notebook, a PDF will be created automatically
 
 All files are saved directly to `~/Desktop/Notebook/`:
@@ -96,12 +83,7 @@ All files are saved directly to `~/Desktop/Notebook/`:
 
 ### `generate_quiz`
 
-Generate a quiz and open the GUI window. MCP waits for window to close, then returns:
-- Question, your selected answer, correct answer
-- Explanation and knowledge points
-- Whether Save to Notebook was clicked
-- Screenshot path (if saved)
-- User feedback prompt (if entered)
+Generate a quiz and open the GUI window. MCP waits for window to close
 
 **Behavior:**
 - If user entered **feedback** → Agent responds to feedback, then calls `generate_quiz` again
@@ -116,10 +98,6 @@ Set custom Notebook storage path (default: `~/Desktop/Notebook`).
 
 Generate a rich PDF study note using the `rich-notebook-pdf-generator` agent skill.
 
-**Parameters:**
-- `topic` - Note title / PDF filename
-- `screenshotPath` (optional) - Path to screenshot for header image
-
 ## 🎭 Built-in Agent Skills
 
 Located in `src/builtin-skills/rich-notebook-pdf-generator/`:
@@ -132,31 +110,6 @@ Located in `src/builtin-skills/rich-notebook-pdf-generator/`:
 4. **Analogy & Memory Aids** - Everyday analogies and comparisons
 5. **Summary Table** - Comparison tables for quick review
 6. **Process Flowchart** - Text-based flowcharts using box-drawing characters
-
-**Formatting Rules:**
-- Use **bold liberally** for key terms and conclusions
-- Numbered hierarchy: `1.`, `1.1`, `1.2`, `2.`...
-- Tables over bullet lists
-- No checkboxes (`[ ]` or `[x]`)
-- Screenshot inserted as header image below title
-
-**PDF Generation:**
-```bash
-python scripts/notebook_pdf_writer.py <payload.json> [out.pdf]
-```
-
-## 🏗️ Project Structure
-
-```
-Live-time-tutorial/
-├── src/
-│   ├── index.ts              # MCP server core
-│   └── builtin-skills/
-│       └── rich-notebook-pdf-generator/  # Agent skill & PDF script
-├── python/
-│   └── quiz_gui.py           # Interactive quiz GUI
-└── dist/                     # Compiled output
-```
 
 ## 📄 License
 
