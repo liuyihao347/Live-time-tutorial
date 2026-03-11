@@ -16,6 +16,10 @@
   <strong>让AI在完成任务后生成知识测验，一键保存截图并自动生成精美PDF笔记</strong>
 </p>
 
+<p align="center">
+  <img src="Example quiz.png" alt="Quiz GUI Screenshot" width="600">
+</p>
+
 ---
 
 ## 🧠 特性

@@ -16,6 +16,10 @@
   <strong>AI generates interactive knowledge quizzes with instant feedback and one-click Notebook export</strong>
 </p>
 
+<p align="center">
+  <img src="Example quiz.png" alt="Quiz GUI Screenshot" width="600">
+</p>
+
 ---
 
 ## 🧠 Highlights
