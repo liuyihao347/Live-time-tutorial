@@ -63,7 +63,7 @@ npm run build
 ```
 
 ### 3. 添加全局规则（推荐）
-添加全局规则（rules\task-feedback.md）给 agent 以提高此 MCP 的触发频率。
+给 agent 添加全局规则（rules\task-feedback.md）以提高此 MCP 的触发频率。
 
 ### 4. 重启 IDE
 配置完成后重启 IDE 即可激活 MCP 服务。

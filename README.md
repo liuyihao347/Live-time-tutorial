@@ -63,7 +63,7 @@ Add to your IDE's MCP config, replacing `[PATH_TO_PROJECT]` with the actual path
 ```
 
 ### 3. Add global rule (Recommended)
-Add the global rule (rules\task-feedback.md) to the agent to increase the trigger frequency of this MCP.
+Add this global rule (rules\task-feedback.md) to your agent to increase the trigger frequency of this MCP.
 
 ### 4. Restart IDE
 Restart your IDE to activate the MCP service.
