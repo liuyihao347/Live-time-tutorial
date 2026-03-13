@@ -3,7 +3,7 @@ alwaysApply: true
 trigger: always_on
 ---
 
-# Task End Quiz Trigger Rules
+# Live-time-tutorial MCP Trigger Rules
 
 ## Mandatory Requirement
 After completing any user request, if this round of task has formed clear knowledge points, conclusions, repair reasons, implementation steps, or code understanding results, you **must prioritize calling** the `generate_quiz` tool in the `live-time-tutorial` MCP instead of ending the conversation directly.

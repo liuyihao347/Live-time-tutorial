@@ -110,11 +110,11 @@ class QuizWindow:
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         width = min(int(sw * 0.98), 2400)
-        height = min(int(sh * 0.96), 1400)
+        height = min(int(sh * 0.98), 1600)  # Increased from 0.96 and 1400
         x = (sw - width) // 2
         y = max(0, (sh - height) // 2 - 10)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
-        self.root.minsize(1024, 840)
+        self.root.minsize(1024, 940)  # Increased min height from 840
         
         self._setup_style()
         self.setup_ui()
@@ -235,7 +235,15 @@ class QuizWindow:
 
         options_wrap = tk.Frame(opt_section, bg="#101B2D", highlightthickness=0)
         options_wrap.grid(row=1, column=0, sticky="nsew")
+        options_wrap.pack_propagate(False)
         self.options_wrap = options_wrap
+
+        self.hint_label = ttk.Label(
+            opt_section,
+            text="Choose one option, then review the explanation or enter feedback below.",
+            style="Muted.TLabel",
+        )
+        self.hint_label.grid(row=2, column=0, sticky="ew", pady=(6, 0))
 
         for i, option in enumerate(self.quiz_data.get("options", [])):
             row = tk.Frame(
@@ -286,10 +294,6 @@ class QuizWindow:
             text_label.bind("<Leave>", lambda _e, widget=row: self._hover_option(widget, False))
 
             self.option_rows.append({"row": row, "index_label": index_label, "text_label": text_label})
-
-        self.hint_label = tk.Label(options_wrap, text="Click any option to submit your answer",
-                                   bg="#101B2D", fg="#9FB0CB", font=("Segoe UI", 9), anchor=tk.W)
-        self.hint_label.pack(fill=tk.X, pady=(6, 0))
 
         # ── Right column: Result panel (expands to fill) ──
         right = ttk.Frame(content, style="Card.TFrame", padding=14)
@@ -415,6 +419,12 @@ class QuizWindow:
         return None
 
     def _update_option_density(self, _event=None):
+        if self._density_job is not None:
+            self.root.after_cancel(self._density_job)
+        self._density_job = self.root.after(50, self._do_update_option_density)
+
+    def _do_update_option_density(self):
+        self._density_job = None
         count = len(self.option_rows)
         if count == 0 or not hasattr(self, "options_wrap"):
             return
@@ -427,22 +437,29 @@ class QuizWindow:
         if available_height <= 1:
             return
 
+        # Check if available dimensions haven't changed much to prevent oscillation
+        if hasattr(self, "_last_aw") and abs(self._last_aw - available_width) < 5 and abs(self._last_ah - available_height) < 5:
+            return
+            
+        self._last_aw = available_width
+        self._last_ah = available_height
+
         base_rows_height = sum(max(44, cfg["row"].winfo_reqheight()) for cfg in self.option_rows)
         hint_height = self.hint_label.winfo_reqheight() + 8
         free_height = max(0, available_height - base_rows_height - hint_height)
 
-        gap = max(4, min(48, free_height // (count + 1)))
-        inner_y_pad = max(8, min(24, 8 + gap // 2))
+        gap = max(8, min(64, free_height // (count + 1)))
+        inner_y_pad = max(12, min(32, 10 + gap // 2))
         wrap_length = max(260, available_width - 120)
 
         for i, cfg in enumerate(self.option_rows):
-            top_gap = gap if i == 0 else gap // 2
-            bottom_gap = gap // 2
+            top_gap = gap if i == 0 else gap // 2 + 4
+            bottom_gap = gap // 2 + 4
             cfg["row"].pack_configure(pady=(top_gap, bottom_gap))
             cfg["row"].configure(pady=inner_y_pad)
             cfg["text_label"].configure(wraplength=wrap_length)
 
-        self.hint_label.pack_configure(pady=(max(6, gap // 2), 0))
+        self.hint_label.grid_configure(pady=(max(6, gap // 2), 0))
 
     def _hover_option(self, row: tk.Frame, entering: bool):
         if self.answered:
@@ -497,11 +514,9 @@ class QuizWindow:
             self._set_option_style(selected, "wrong")
 
         explanation = (self.quiz_data.get("explanation") or "").strip()
+        terminology = (self.quiz_data.get("terminology") or "").strip()
         knowledge = (self.quiz_data.get("knowledgeSummary") or "").strip()
         points = _extract_points(knowledge)
-
-        correct_answer = self.quiz_data.get("options", [""])[correct]
-        selected_answer = self.quiz_data.get("options", [""])[selected]
 
         badge = "Correct" if is_correct else "Incorrect"
         self.result_badge.config(text=badge)
@@ -511,25 +526,28 @@ class QuizWindow:
             else "Review the explanation to understand the correct approach."
         )
 
-        lines = [
-            f"Your answer: {chr(65 + selected)}. {selected_answer}",
-            f"Correct answer: {chr(65 + correct)}. {correct_answer}",
-        ]
+        lines = []
         
+        if terminology:
+            lines.extend([
+                "Terminology & Definitions",
+                terminology,
+                ""
+            ])
+            
         if explanation:
             lines.extend([
-                "",
                 "Clear Explanation",
-                explanation
+                explanation,
+                ""
             ])
 
         if points:
-            lines.append("")
             lines.append("Key Points")
             for p in points:
                 lines.append(f"- {p}")
 
-        text = "\n".join(lines)
+        text = "\n".join(lines).strip()
         self.result_text.config(state=tk.NORMAL)
         self.result_text.delete("1.0", tk.END)
         self.result_text.insert("1.0", text)
@@ -615,7 +633,7 @@ def load_quiz_from_args():
         sys.exit(1)
 
     try:
-        return json.loads(quiz_file.read_text(encoding="utf-8"))
+        return json.loads(quiz_file.read_text(encoding="utf-8-sig"))
     except json.JSONDecodeError:
         root = tk.Tk()
         root.withdraw()

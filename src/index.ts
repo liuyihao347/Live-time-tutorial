@@ -18,6 +18,7 @@ interface QuizData {
   question: string;
   options: string[];
   correctIndex: number;
+  terminology?: string;
   explanation: string;
   knowledgeSummary: string;
   createdAt: number;
@@ -121,16 +122,17 @@ class QuizMCPServer {
         tools: [
           {
             name: "generate_quiz",
-            description: "Generate a knowledge quiz and open the Live-time-tutorial GUI window.",
+            description: "Generate a knowledge quiz and open the Live-time-tutorial GUI window. The question, options, terminology, explanation, and knowledge summary must use the same language as the user's current prompt.",
             inputSchema: {
               type: "object",
               properties: {
-                question: { type: "string", description: "Quiz question" },
-                options: { type: "array", items: { type: "string" }, description: "Answer options" },
+                question: { type: "string", description: "Quiz question in the same language as the user's current prompt" },
+                options: { type: "array", items: { type: "string" }, description: "Answer options in the same language as the user's current prompt" },
                 correctIndex: { type: "number", description: "Correct option index (0-based)" },
-                explanation: { type: "string", description: "Short explanation" },
-                knowledgeSummary: { type: "string", description: "Key points separated by |" },
-                category: { type: "string", description: "Category" },
+                explanation: { type: "string", description: "Clear explanation in the same language as the user's current prompt, explaining why the correct answer is right and others are wrong" },
+                terminology: { type: "string", description: "Terminology or abbreviation explanations in the same language as the user's current prompt" },
+                knowledgeSummary: { type: "string", description: "Key points separated by |, in the same language as the user's current prompt" },
+                category: { type: "string", description: "Category, preferably in the same language as the user's current prompt" },
               },
               required: ["question", "options", "correctIndex", "explanation"],
             },
@@ -190,6 +192,7 @@ class QuizMCPServer {
     question: string;
     options: string[];
     correctIndex: number;
+    terminology?: string;
     explanation: string;
     knowledgeSummary?: string;
     category?: string;
@@ -205,6 +208,7 @@ class QuizMCPServer {
       question: args.question,
       options: args.options,
       correctIndex: args.correctIndex,
+      terminology: args.terminology,
       explanation: args.explanation,
       knowledgeSummary: knowledgePoints.join("|"),
       createdAt: Date.now(),
