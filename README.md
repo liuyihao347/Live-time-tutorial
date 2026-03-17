@@ -53,10 +53,11 @@ Add to your IDE's MCP config, replacing `[PATH_TO_PROJECT]` with the actual path
 {
   "mcpServers": {
     "live-time-tutorial": {
+      "args": [
+        "[PATH_TO_PROJECT]/dist/index.js"
+      ],
       "command": "node",
-      "args": ["[PATH_TO_PROJECT]/dist/index.js"],
-      "env": { "NODE_ENV": "production" },
-      "autoApprove": ["generate_quiz", "set_notebook_path", "save_notebook_note_pdf"]
+      "disabled": false
     }
   }
 }
