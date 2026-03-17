@@ -334,7 +334,7 @@ The user closed the quiz window without answering or leaving feedback. Do NOT ge
     };
   }
 
-  private launchPythonGuiAndWait(quizPath: string, resultPath: string): Promise<void> {
+  private launchPythonGuiAndWait(quizPath: string, resultPath: string, attempt: number = 1): Promise<void> {
     return new Promise((resolvePromise, rejectPromise) => {
       const pythonExe = process.platform === "win32" ? "python" : "python3";
       const guiScriptPath = resolve(__dirname, "..", "python", "quiz_gui.py");
@@ -345,18 +345,61 @@ The user closed the quiz window without answering or leaving feedback. Do NOT ge
       }
 
       const child = spawn(pythonExe, [guiScriptPath, quizPath, resultPath], {
-        stdio: "ignore",
+        stdio: ["ignore", "pipe", "pipe"],
         shell: false,
       });
 
-      console.error(`[MCP] Launched Python GUI: ${guiScriptPath} ${quizPath} ${resultPath}`);
+      console.error(`[MCP] Launched Python GUI (Attempt ${attempt}): ${guiScriptPath}`);
 
-      child.on("close", () => {
-        resolvePromise();
+      let windowReady = false;
+      let stdoutData = "";
+      
+      const timeout = setTimeout(() => {
+        if (!windowReady) {
+          console.error(`[MCP] Python GUI failed to initialize within 5 seconds. Killing process...`);
+          child.kill();
+          
+          if (attempt < 3) {
+            console.error(`[MCP] Retrying... (${attempt + 1}/3)`);
+            resolvePromise(this.launchPythonGuiAndWait(quizPath, resultPath, attempt + 1));
+          } else {
+            rejectPromise(new Error("Python GUI failed to initialize after 3 attempts."));
+          }
+        }
+      }, 5000);
+
+      child.stdout.on("data", (data) => {
+        const text = data.toString();
+        stdoutData += text;
+        if (text.includes("WINDOW_READY")) {
+          windowReady = true;
+          clearTimeout(timeout);
+          console.error("[MCP] Window initialized successfully.");
+        }
+      });
+
+      child.stderr.on("data", (data) => {
+        console.error(`[GUI Error] ${data.toString().trim()}`);
+      });
+
+      child.on("close", (code) => {
+        clearTimeout(timeout);
+        if (!windowReady && attempt < 3 && code !== 0) {
+           console.error(`[MCP] Process closed unexpectedly. Retrying... (${attempt + 1}/3)`);
+           resolvePromise(this.launchPythonGuiAndWait(quizPath, resultPath, attempt + 1));
+        } else {
+           resolvePromise();
+        }
       });
 
       child.on("error", (err) => {
-        rejectPromise(err);
+        clearTimeout(timeout);
+        if (attempt < 3) {
+           console.error(`[MCP] Process error: ${err.message}. Retrying... (${attempt + 1}/3)`);
+           resolvePromise(this.launchPythonGuiAndWait(quizPath, resultPath, attempt + 1));
+        } else {
+           rejectPromise(err);
+        }
       });
     });
   }

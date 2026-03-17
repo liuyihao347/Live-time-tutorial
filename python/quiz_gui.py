@@ -124,6 +124,10 @@ class QuizWindow:
         self.root.attributes('-topmost', True)
         self.root.after(100, lambda: self.root.attributes('-topmost', False))
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+        # Signal that the window is ready
+        print("WINDOW_READY", flush=True)
+        
         self.root.mainloop()
 
     def _setup_style(self):
