@@ -110,11 +110,11 @@ class QuizWindow:
         sw = self.root.winfo_screenwidth()
         sh = self.root.winfo_screenheight()
         width = min(int(sw * 0.98), 2400)
-        height = min(int(sh * 0.98), 1600)  # Increased from 0.96 and 1400
+        height = min(int(sh * 0.98), 1800)  # Increased from 0.96 and 1600
         x = (sw - width) // 2
         y = max(0, (sh - height) // 2 - 10)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
-        self.root.minsize(1024, 940)  # Increased min height from 840
+        self.root.minsize(1024, 1024)  # Increased min height from 940
         
         self._setup_style()
         self.setup_ui()
