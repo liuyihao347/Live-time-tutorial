@@ -31,14 +31,14 @@ interface NotebookConfig {
 
 
 function sanitizeFilename(name: string): string {
-  return name.replace(/[<>:"/\\|?*]/g, "").trim().substring(0, 40);
+  return name.replace(/[<>:"/\\|?*%]/g, "").replace(/\s+/g, " ").trim().substring(0, 40);
 }
 
 function generateQuizFilename(quiz: QuizData): string {
-  const category = quiz.category || "Uncategorized";
-  const questionPreview = sanitizeFilename(quiz.question.split(/[,.?!]/)[0]);
-  const shortDate = new Date(quiz.createdAt).toISOString().slice(0, 10).replace(/-/g, "");
-  return `${shortDate}_${category}_${questionPreview}.json`;
+  const category = sanitizeFilename(quiz.category || "Uncategorized");
+  // 使用较短的时间戳 (包含时分秒) 和 截断后的分类名组合成更短且唯一的文件名
+  const timestamp = new Date(quiz.createdAt).toISOString().replace(/[-:T]/g, "").slice(0, 14); // e.g. 20240323115500
+  return `Quiz_${timestamp}_${category.substring(0, 20)}.json`;
 }
 
 class QuizMCPServer {
@@ -111,8 +111,8 @@ class QuizMCPServer {
   }
 
   private sanitizeNoteFilename(topic: string): string {
-    const base = (topic || "note").replace(/[<>:"/\\|?*]/g, "").trim().replace(/\s+/g, " ");
-    const shortened = base.length > 80 ? base.slice(0, 80) : base;
+    const base = (topic || "note").replace(/[<>:"/\\|?*%]/g, "").trim().replace(/\s+/g, " ");
+    const shortened = base.length > 40 ? base.slice(0, 40) : base;
     return shortened || "note";
   }
 
